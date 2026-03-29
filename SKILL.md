@@ -5,7 +5,7 @@ description: >
   catalog, customers, inventory, promotions, and sales reporting. Triggers on
   requests like "show me today's orders", "update product stock", "create a
   coupon code", "run a sales report", or anything referencing a Magento store.
-version: 0.1.0
+version: 1.0.0
 metadata:
   openclaw:
     emoji: "🛒"
