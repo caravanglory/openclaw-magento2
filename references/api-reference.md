@@ -59,6 +59,32 @@ Generate in Magento Admin → System → Integrations.
 
 ---
 
+## Multi-Source Inventory (MSI)
+
+Requires Magento 2.3+ with Inventory modules enabled.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `inventory/sources` | GET | Search sources (searchCriteria) |
+| `inventory/sources/{sourceCode}` | GET | Get source details |
+| `inventory/sources` | POST | Create source |
+| `inventory/sources/{sourceCode}` | PUT | Update source |
+| `inventory/source-items` | GET | Search source items (searchCriteria) |
+| `inventory/source-items` | POST | Bulk save source items |
+| `inventory/source-items-delete` | POST | Bulk delete source items |
+| `inventory/stocks` | GET | Search stocks (searchCriteria) |
+| `inventory/stocks/{stockId}` | GET | Get stock |
+| `inventory/stocks` | POST | Create stock |
+| `inventory/stocks/{stockId}` | PUT | Update stock |
+| `inventory/stocks/{stockId}` | DELETE | Delete stock |
+| `inventory/get-product-salable-quantity/{sku}/{stockId}` | GET | Get salable qty |
+| `inventory/is-product-salable/{sku}/{stockId}` | GET | Check if salable |
+| `inventory/stock-source-links` | GET | List stock-source links |
+| `inventory/stock-source-links` | POST | Assign sources to stock |
+| `inventory/stock-source-links-delete` | POST | Unassign sources from stock |
+
+---
+
 ## Promotions
 
 | Endpoint | Method | Description |

@@ -161,6 +161,33 @@ python3 inventory.py low-stock [--threshold N]
 python3 inventory.py bulk-check <sku1,sku2,...>
 ```
 
+#### Multi-Source Inventory (MSI)
+
+Requires Magento 2.3+ with Inventory modules enabled.
+
+```
+# List inventory sources (warehouses)
+python3 inventory.py sources [--limit N]
+
+# Get details for a specific source
+python3 inventory.py source-get <source_code>
+
+# List source items (stock per source) — filter by SKU, source, or both
+python3 inventory.py source-items --sku <sku> [--source <source_code>] [--limit N]
+
+# Update quantity for a SKU at a specific source
+python3 inventory.py source-item-update <sku> <source_code> <qty>
+
+# Get salable quantity for a SKU in a stock
+python3 inventory.py salable-qty <sku> <stock_id>
+
+# Check if a product is salable in a stock
+python3 inventory.py is-salable <sku> <stock_id>
+
+# List inventory stocks (logical groupings)
+python3 inventory.py stocks [--limit N]
+```
+
 ### Promotions — `scripts/promotions.py`
 
 ```
@@ -245,7 +272,7 @@ If a script fails, read stderr, extract the `message` field, and tell the user p
 ## Rules
 
 - Never expose OAuth credentials in chat output, logs, or summaries.
-- For any **write operation** (cancel, delete, update-price, update-status, update-group, cache-flush, ship, invoice, create-coupon, disable, and all POST/PUT/DELETE via custom_api.py), always repeat the full command back to the user and wait for explicit confirmation before executing.
+- For any **write operation** (cancel, delete, update-price, update-status, update-group, cache-flush, ship, invoice, create-coupon, disable, source-item-update, and all POST/PUT/DELETE via custom_api.py), always repeat the full command back to the user and wait for explicit confirmation before executing.
 - **Read-only operations** (list, get, search, check, status, modules, schema, cache-list, reports) may be executed directly without confirmation.
 - When a date range is not specified for reports, default to the last 30 days.
 - Monetary values are returned in the store's base currency — include the currency code in output.
