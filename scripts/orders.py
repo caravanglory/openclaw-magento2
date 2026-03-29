@@ -16,7 +16,7 @@ except ImportError:
 
 
 def cmd_list(args):
-    client = get_client()
+    client = get_client(args.site)
     filters = []
     if args.status:
         filters.append({"field": "status", "value": args.status, "condition_type": "eq"})
@@ -64,7 +64,7 @@ def resolve_order_id(client, order_id: str) -> str:
 
 
 def cmd_get(args):
-    client = get_client()
+    client = get_client(args.site)
     order_id = resolve_order_id(client, args.order_id)
 
     try:
@@ -96,7 +96,7 @@ def cmd_get(args):
 
 
 def cmd_update_status(args):
-    client = get_client()
+    client = get_client(args.site)
     order_id = resolve_order_id(client, args.order_id)
     try:
         result = client.post(
@@ -109,7 +109,7 @@ def cmd_update_status(args):
 
 
 def cmd_cancel(args):
-    client = get_client()
+    client = get_client(args.site)
     order_id = resolve_order_id(client, args.order_id)
     try:
         result = client.post(f"orders/{order_id}/cancel", {})
@@ -119,7 +119,7 @@ def cmd_cancel(args):
 
 
 def cmd_ship(args):
-    client = get_client()
+    client = get_client(args.site)
     order_id = resolve_order_id(client, args.order_id)
     body = {"items": [], "notify": True}
     if args.track:
@@ -138,7 +138,7 @@ def cmd_ship(args):
 
 
 def cmd_invoice(args):
-    client = get_client()
+    client = get_client(args.site)
     order_id = resolve_order_id(client, args.order_id)
     try:
         # Simple invoice for all items
@@ -150,6 +150,7 @@ def cmd_invoice(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Magento 2 order management")
+    parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_list = sub.add_parser("list", help="List recent orders")

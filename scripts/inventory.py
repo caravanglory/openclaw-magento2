@@ -15,7 +15,7 @@ except ImportError:
 
 
 def cmd_check(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         item = client.get(f"stockItems/{args.sku}")
     except MagentoAPIError as e:
@@ -33,7 +33,7 @@ def cmd_check(args):
 
 
 def cmd_update(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         current = client.get(f"stockItems/{args.sku}")
         item_id = current.get("item_id")
@@ -46,7 +46,7 @@ def cmd_update(args):
 
 
 def cmd_low_stock(args):
-    client = get_client()
+    client = get_client(args.site)
     threshold = args.threshold
 
     # Fetch all enabled, in-catalog products and check their stock
@@ -75,7 +75,7 @@ def cmd_low_stock(args):
 
 
 def cmd_bulk_check(args):
-    client = get_client()
+    client = get_client(args.site)
     skus = [s.strip() for s in args.skus.split(",") if s.strip()]
     if not skus:
         print("No SKUs provided.")
@@ -107,6 +107,7 @@ def cmd_bulk_check(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Magento 2 inventory management")
+    parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_check = sub.add_parser("check", help="Check stock for a SKU")

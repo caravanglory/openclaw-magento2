@@ -15,7 +15,7 @@ except ImportError:
 
 
 def cmd_list(args):
-    client = get_client()
+    client = get_client(args.site)
     filters = []
     if args.active_only:
         filters.append({"field": "is_active", "value": "1", "condition_type": "eq"})
@@ -45,7 +45,7 @@ def cmd_list(args):
 
 
 def cmd_get(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         r = client.get(f"salesRules/{args.rule_id}")
     except MagentoAPIError as e:
@@ -68,7 +68,7 @@ def cmd_get(args):
 
 
 def cmd_create_coupon(args):
-    client = get_client()
+    client = get_client(args.site)
     body = {
         "coupon": {
             "rule_id": int(args.rule_id),
@@ -91,7 +91,7 @@ def cmd_create_coupon(args):
 
 
 def cmd_disable(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         rule = client.get(f"salesRules/{args.rule_id}")
         rule["is_active"] = False
@@ -102,7 +102,7 @@ def cmd_disable(args):
 
 
 def cmd_coupon_stats(args):
-    client = get_client()
+    client = get_client(args.site)
     filters = [{"field": "code", "value": args.coupon_code, "condition_type": "eq"}]
     try:
         result = client.search("coupons/search", filters=filters, page_size=1)
@@ -129,6 +129,7 @@ def cmd_coupon_stats(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Magento 2 promotions management")
+    parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_list = sub.add_parser("list", help="List cart price rules")

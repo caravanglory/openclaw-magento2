@@ -36,9 +36,11 @@ class MagentoAPIError(Exception):
 
 
 class MagentoClient:
-    def __init__(self):
+    def __init__(self, site: str | None = None):
+        self._site_suffix = str(site).upper() if site else None
+        self.site = site
         self.base_url = self._require_env("MAGENTO_BASE_URL").rstrip("/")
-        self.timeout = int(os.environ.get("MAGENTO_TIMEOUT", "30"))
+        self.timeout = int(self._env_with_fallback("MAGENTO_TIMEOUT", "30"))
         self.auth = OAuth1(
             client_key=self._require_env("MAGENTO_CONSUMER_KEY"),
             client_secret=self._require_env("MAGENTO_CONSUMER_SECRET"),
@@ -60,12 +62,19 @@ class MagentoClient:
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
 
-    @staticmethod
-    def _require_env(name: str) -> str:
-        value = os.environ.get(name)
+    def _require_env(self, name: str) -> str:
+        lookup = f"{name}_{self._site_suffix}" if self._site_suffix else name
+        value = os.environ.get(lookup)
         if not value:
-            sys.exit(json.dumps({"error": "missing_env", "message": f"Environment variable {name!r} is not set.", "url": ""}))
+            sys.exit(json.dumps({"error": "missing_env", "message": f"Environment variable {lookup!r} is not set.", "url": ""}))
         return value
+
+    def _env_with_fallback(self, name: str, default: str) -> str:
+        if self._site_suffix:
+            value = os.environ.get(f"{name}_{self._site_suffix}")
+            if value:
+                return value
+        return os.environ.get(name, default)
 
     def _url(self, path: str) -> str:
         # We must encode path segments (especially SKUs) that might contain spaces or slashes.
@@ -150,6 +159,18 @@ def print_error_and_exit(err: MagentoAPIError) -> None:
     sys.exit(1)
 
 
-def get_client() -> MagentoClient:
+def get_client(site: str | None = None) -> MagentoClient:
     """Convenience factory — call this at the top of each script."""
-    return MagentoClient()
+    return MagentoClient(site=site)
+
+
+def list_configured_sites() -> tuple[list[str], bool]:
+    """Discover configured sites by scanning MAGENTO_BASE_URL_* env vars."""
+    prefix = "MAGENTO_BASE_URL_"
+    sites = sorted(
+        key[len(prefix):].lower()
+        for key in os.environ
+        if key.startswith(prefix)
+    )
+    has_default = bool(os.environ.get("MAGENTO_BASE_URL"))
+    return sites, has_default

@@ -40,7 +40,7 @@ def fetch_all(client, resource: str, filters: list | None = None) -> list[dict]:
 
 
 def cmd_sales(args):
-    client = get_client()
+    client = get_client(args.site)
     date_from = args.__dict__.get("from") or default_date_range()[0]
     date_to = args.__dict__.get("to") or default_date_range()[1]
 
@@ -89,7 +89,7 @@ def cmd_sales(args):
 
 
 def cmd_top_products(args):
-    client = get_client()
+    client = get_client(args.site)
     date_from = args.__dict__.get("from") or default_date_range()[0]
     date_to = args.__dict__.get("to") or default_date_range()[1]
 
@@ -135,7 +135,7 @@ def cmd_top_products(args):
 
 
 def cmd_top_customers(args):
-    client = get_client()
+    client = get_client(args.site)
     date_from = args.__dict__.get("from") or default_date_range()[0]
     date_to = args.__dict__.get("to") or default_date_range()[1]
 
@@ -175,7 +175,7 @@ def cmd_top_customers(args):
 
 
 def cmd_order_status(args):
-    client = get_client()
+    client = get_client(args.site)
     date_from = args.__dict__.get("from") or default_date_range()[0]
     date_to = args.__dict__.get("to") or default_date_range()[1]
 
@@ -205,7 +205,7 @@ def cmd_order_status(args):
 
 
 def cmd_inventory_value(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         stock_items = fetch_all(client, "stockItems")
         products = fetch_all(client, "products")
@@ -232,6 +232,7 @@ def cmd_inventory_value(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Magento 2 sales & inventory reporting")
+    parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     for name in ("sales", "top-products", "top-customers", "order-status"):

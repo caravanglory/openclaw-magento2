@@ -15,7 +15,7 @@ except ImportError:
 
 
 def cmd_search(args):
-    client = get_client()
+    client = get_client(args.site)
     # OR filter between Email, Firstname and Lastname
     filters = [[
         {"field": "email", "value": f"%{args.query}%", "condition_type": "like"},
@@ -47,7 +47,7 @@ def cmd_search(args):
 
 
 def cmd_get(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         c = client.get(f"customers/{args.customer_id}")
     except MagentoAPIError as e:
@@ -75,7 +75,7 @@ def cmd_get(args):
 
 
 def cmd_orders(args):
-    client = get_client()
+    client = get_client(args.site)
     filters = [{"field": "customer_id", "value": args.customer_id, "condition_type": "eq"}]
     try:
         result = client.search("orders", filters=filters, page_size=20, sort_field="created_at", sort_dir="DESC")
@@ -103,7 +103,7 @@ def cmd_orders(args):
 
 
 def cmd_update_group(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         c = client.get(f"customers/{args.customer_id}")
         c["group_id"] = int(args.group_id)
@@ -115,6 +115,7 @@ def cmd_update_group(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Magento 2 customer management")
+    parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_search = sub.add_parser("search", help="Search customers by email or name")

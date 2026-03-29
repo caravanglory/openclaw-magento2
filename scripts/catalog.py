@@ -16,7 +16,7 @@ except ImportError:
 
 
 def cmd_search(args):
-    client = get_client()
+    client = get_client(args.site)
     # OR filter between SKU and Name
     filters = [[
         {"field": "name", "value": f"%{args.query}%", "condition_type": "like"},
@@ -47,7 +47,7 @@ def cmd_search(args):
 
 
 def cmd_get(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         p = client.get(f"products/{args.sku}")
     except MagentoAPIError as e:
@@ -79,7 +79,7 @@ def cmd_get(args):
 
 
 def cmd_update_price(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         result = client.put(
             f"products/{args.sku}",
@@ -91,7 +91,7 @@ def cmd_update_price(args):
 
 
 def cmd_update_attribute(args):
-    client = get_client()
+    client = get_client(args.site)
     custom_attrs = [{"attribute_code": args.attribute, "value": args.value}]
     body = {"product": {"sku": args.sku, "custom_attributes": custom_attrs}}
     # Price and name are top-level fields, not custom attributes
@@ -107,7 +107,7 @@ def cmd_update_attribute(args):
 
 
 def cmd_categories(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         result = client.get("categories")
     except MagentoAPIError as e:
@@ -124,7 +124,7 @@ def cmd_categories(args):
 
 
 def cmd_delete(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         client.delete(f"products/{args.sku}")
     except MagentoAPIError as e:
@@ -133,7 +133,7 @@ def cmd_delete(args):
 
 
 def cmd_update_status(args):
-    client = get_client()
+    client = get_client(args.site)
     status = 1 if args.status.lower() in ("enabled", "1", "true", "active") else 2
     try:
         client.put(f"products/{args.sku}", {"product": {"sku": args.sku, "status": status}})
@@ -144,6 +144,7 @@ def cmd_update_status(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Magento 2 catalog management")
+    parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_search = sub.add_parser("search", help="Search products by name")

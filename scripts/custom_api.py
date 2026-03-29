@@ -15,9 +15,10 @@ def main():
     parser.add_argument("path", help="API path (e.g. 'blog/posts' or full '/rest/V1/blog/posts')")
     parser.add_argument("--data", help="JSON string for POST/PUT body")
     parser.add_argument("--params", help="JSON string for GET query parameters")
+    parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
 
     args = parser.parse_args()
-    client = get_client()
+    client = get_client(args.site)
 
     data = None
     if args.data:

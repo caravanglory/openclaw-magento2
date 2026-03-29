@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """System management — health checks and cache management."""
 
+import os
 import sys
 import argparse
 import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit
+from magento_client import get_client, list_configured_sites, MagentoAPIError, print_error_and_exit
 
 try:
     from tabulate import tabulate
@@ -16,7 +17,7 @@ except ImportError:
 
 
 def cmd_status(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         # Check basic connection by fetching store info
         store_info = client.get("store/storeConfigs")
@@ -30,7 +31,7 @@ def cmd_status(args):
 
 
 def cmd_modules(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         modules = client.get("modules")
         print(f"Total Modules: {len(modules)}")
@@ -49,7 +50,7 @@ def cmd_modules(args):
 
 
 def cmd_schema(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         # Fetch the schema. This can be VERY large, so we just want to see if it works
         # and maybe list some top-level paths.
@@ -77,7 +78,7 @@ def cmd_schema(args):
 
 
 def cmd_cache_list(args):
-    client = get_client()
+    client = get_client(args.site)
     try:
         caches = client.get("cache")
     except MagentoAPIError as e:
@@ -88,7 +89,7 @@ def cmd_cache_list(args):
 
 
 def cmd_cache_flush(args):
-    client = get_client()
+    client = get_client(args.site)
     # If no types specified, flush all
     try:
         if not args.types:
@@ -108,25 +109,41 @@ def cmd_cache_flush(args):
         print_error_and_exit(e)
 
 
+def cmd_sites(args):
+    sites, has_default = list_configured_sites()
+    if not has_default and not sites:
+        print("No sites configured. Set MAGENTO_BASE_URL or MAGENTO_BASE_URL_<SITE>.")
+        return
+    rows = []
+    if has_default:
+        rows.append(["(default)", os.environ.get("MAGENTO_BASE_URL", "")])
+    for site in sites:
+        rows.append([site, os.environ.get(f"MAGENTO_BASE_URL_{site.upper()}", "")])
+    print(tabulate(rows, headers=["Site", "Base URL"], tablefmt="github"))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Magento 2 system management")
+    parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("status", help="Check API connection status")
     sub.add_parser("modules", help="List all installed Magento modules")
     sub.add_parser("schema", help="Show REST API schema (summary)")
     sub.add_parser("cache-list", help="List cache types and statuses")
-    
+    sub.add_parser("sites", help="List all configured Magento sites")
+
     p_flush = sub.add_parser("cache-flush", help="Flush specific or all caches")
     p_flush.add_argument("--types", help="Comma-separated list of cache IDs to flush (default: all)")
 
     args = parser.parse_args()
     commands = {
-        "status": cmd_status, 
+        "status": cmd_status,
         "modules": cmd_modules,
         "schema": cmd_schema,
-        "cache-list": cmd_cache_list, 
-        "cache-flush": cmd_cache_flush
+        "cache-list": cmd_cache_list,
+        "cache-flush": cmd_cache_flush,
+        "sites": cmd_sites,
     }
     commands[args.command](args)
 

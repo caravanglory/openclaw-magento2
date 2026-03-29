@@ -34,21 +34,46 @@ metadata:
 
 # Magento 2 Skill
 
-Connect to a Magento 2 or Adobe Commerce store via its REST API using OAuth 1.0a.
+Connect to one or more Magento 2 / Adobe Commerce stores via REST API using OAuth 1.0a.
 
 ## Authentication
 
 All requests are signed with OAuth 1.0a. Credentials are read from environment variables — never ask the user to paste them in chat.
 
-Required env vars:
+### Single site (default)
+
 - `MAGENTO_BASE_URL` — e.g. `https://store.example.com`
 - `MAGENTO_CONSUMER_KEY`
 - `MAGENTO_CONSUMER_SECRET`
 - `MAGENTO_ACCESS_TOKEN`
 - `MAGENTO_ACCESS_TOKEN_SECRET`
 
-Optional env vars:
-- `MAGENTO_TIMEOUT` — Default is 30 seconds.
+### Multi-site setup
+
+To connect to additional stores, define credentials with a site suffix (`MAGENTO_<VAR>_<SITE>`):
+
+```
+MAGENTO_BASE_URL_US=https://us.store.com
+MAGENTO_CONSUMER_KEY_US=...
+MAGENTO_CONSUMER_SECRET_US=...
+MAGENTO_ACCESS_TOKEN_US=...
+MAGENTO_ACCESS_TOKEN_SECRET_US=...
+
+MAGENTO_BASE_URL_EU=https://eu.store.com
+MAGENTO_CONSUMER_KEY_EU=...
+...
+```
+
+All scripts accept `--site <alias>` to target a specific store. When omitted, the default (unsuffixed) credentials are used.
+
+```
+python3 orders.py list --site us --limit 10
+python3 system.py sites            # list all configured sites
+```
+
+### Optional env vars
+
+- `MAGENTO_TIMEOUT` — Default is 30 seconds. Supports per-site override: `MAGENTO_TIMEOUT_US`.
 - `MAGENTO_DEBUG` — Set to 1 to enable verbose logging to stderr.
 
 All scripts import the shared client from `scripts/magento_client.py`. Never construct raw HTTP requests inline — always use the client.
@@ -186,6 +211,9 @@ python3 system.py modules
 # Inspect REST schema
 python3 system.py schema
 
+# List all configured sites
+python3 system.py sites
+
 # Cache management
 python3 system.py cache-list
 python3 system.py cache-flush [--types ID1,ID2]
@@ -221,4 +249,5 @@ If a script fails, read stderr, extract the `message` field, and tell the user p
 - **Read-only operations** (list, get, search, check, status, modules, schema, cache-list, reports) may be executed directly without confirmation.
 - When a date range is not specified for reports, default to the last 30 days.
 - Monetary values are returned in the store's base currency — include the currency code in output.
+- **Multi-site**: When multiple sites are configured, always confirm which site the user intends before executing write operations. Use `system.py sites` to discover available sites.
 - **Production Safety**: After performing updates to products or prices, it is recommended to run `system.py cache-flush` if the changes don't appear on the frontend.
