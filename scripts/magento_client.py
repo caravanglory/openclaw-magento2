@@ -71,6 +71,10 @@ class MagentoClient:
         # We must encode path segments (especially SKUs) that might contain spaces or slashes.
         # Magento expects slashes within a SKU to be encoded (e.g., %2F).
         # Split by / and encode each part, then join.
+        # If the path already starts with /rest/ then we don't prepend /rest/V1/
+        if path.startswith("/rest/"):
+             return f"{self.base_url}{path}"
+        
         parts = [urllib.parse.quote(p, safe="") for p in path.lstrip("/").split("/")]
         return f"{self.base_url}/rest/V1/{'/'.join(parts)}"
 

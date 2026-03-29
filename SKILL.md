@@ -2,9 +2,11 @@
 name: magento2
 description: >
   Manage a Magento 2 / Adobe Commerce store via REST API. Use for orders,
-  catalog, customers, inventory, promotions, and sales reporting. Triggers on
-  requests like "show me today's orders", "update product stock", "create a
-  coupon code", "run a sales report", or anything referencing a Magento store.
+  catalog, customers, inventory, promotions, and sales reporting. It can also
+  discover and interact with custom modules (like blogs) by exploring the
+  system's modules and REST schema. Triggers on requests like "show me today's
+  orders", "update product stock", "check installed modules", "call custom api",
+  or anything referencing a Magento store.
 version: 1.0.0
 metadata:
   openclaw:
@@ -172,20 +174,31 @@ python3 reports.py order-status [--from YYYY-MM-DD] [--to YYYY-MM-DD]
 python3 reports.py inventory-value
 ```
 
-### System — `scripts/system.py`
+### System & Discovery — `scripts/system.py`
 
 ```
 # Check API connection status
 python3 system.py status
 
-# List cache types
+# List installed modules
+python3 system.py modules
+
+# Inspect REST schema
+python3 system.py schema
+
+# Cache management
 python3 system.py cache-list
+python3 system.py cache-flush [--types ID1,ID2]
+```
 
-# Flush all caches
-python3 system.py cache-flush
+### Custom API — `scripts/custom_api.py`
 
-# Flush specific caches (comma-separated)
-python3 system.py cache-flush --types config,layout,block_html
+Use this for interacting with discovered custom endpoints.
+
+```
+# Call custom endpoints (e.g. blog module)
+python3 custom_api.py GET <path> [--params '{"key": "value"}']
+python3 custom_api.py POST <path> --data '{"body": "json"}'
 ```
 
 ## Output format

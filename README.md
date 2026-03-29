@@ -12,6 +12,8 @@ Manage your Magento 2 or Adobe Commerce store directly from **OpenClaw**. This s
 - **Inventory**: Real-time stock checks, bulk updates, and low-stock reporting.
 - **Promotions**: List cart rules, create coupon codes, and monitor usage stats.
 - **Reporting**: Sales summaries, top products, top customers, and inventory value reports.
+- **Discovery**: Explore installed modules and REST API schema to discover custom features.
+- **Custom API**: Interact with discovered custom endpoints (e.g., Blog or custom extensions).
 - **System**: Health checks and cache management (flush/list).
 - **CI/CD**: Integrated GitHub Actions for automated code quality and syntax checks.
 
@@ -51,6 +53,8 @@ Once installed, you can talk to OpenClaw naturally:
 - "Update the price of 'BAG-02' to 49.99."
 - "Create a 20% discount coupon code 'SPRING2026' for Rule ID 5."
 - "Run a sales report for the last 7 days."
+- "What custom modules are installed on my Magento store?"
+- "Explore the REST API schema for the blog module."
 - "Flush the Magento cache."
 
 ## 📄 License

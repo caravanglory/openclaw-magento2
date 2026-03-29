@@ -29,6 +29,53 @@ def cmd_status(args):
         print_error_and_exit(e)
 
 
+def cmd_modules(args):
+    client = get_client()
+    try:
+        modules = client.get("modules")
+        print(f"Total Modules: {len(modules)}")
+        # If too many, just list the first 50 or those that look custom
+        custom = [m for m in modules if not m.startswith("Magento_")]
+        if custom:
+            print("\nCustom/Third-party Modules:")
+            for m in custom:
+                print(f"- {m}")
+        
+        print("\nAll modules (first 20):")
+        for m in modules[:20]:
+            print(f"- {m}")
+    except MagentoAPIError as e:
+        print_error_and_exit(e)
+
+
+def cmd_schema(args):
+    client = get_client()
+    try:
+        # Fetch the schema. This can be VERY large, so we just want to see if it works
+        # and maybe list some top-level paths.
+        schema = client.get("/rest/all/schema?services=all")
+        print("API Schema available.")
+        paths = list(schema.get("paths", {}).keys())
+        print(f"Total API Paths: {len(paths)}")
+        
+        # Look for custom paths (not Magento standard)
+        custom_paths = [p for p in paths if not p.startswith("/V1/")]
+        if custom_paths:
+            print("\nCustom API Paths detected:")
+            for p in custom_paths[:20]:
+                 print(f"- {p}")
+        
+        print("\nStandard API Paths (V1, first 10):")
+        v1_paths = [p for p in paths if p.startswith("/V1/")]
+        for p in v1_paths[:10]:
+            print(f"- {p}")
+            
+    except MagentoAPIError as e:
+        # Schema might be protected or too large
+        print(f"Could not fetch full schema: {e}")
+        print("Try exploring modules instead.")
+
+
 def cmd_cache_list(args):
     client = get_client()
     try:
@@ -66,13 +113,22 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("status", help="Check API connection status")
+    sub.add_parser("modules", help="List all installed Magento modules")
+    sub.add_parser("schema", help="Show REST API schema (summary)")
     sub.add_parser("cache-list", help="List cache types and statuses")
     
     p_flush = sub.add_parser("cache-flush", help="Flush specific or all caches")
     p_flush.add_argument("--types", help="Comma-separated list of cache IDs to flush (default: all)")
 
     args = parser.parse_args()
-    {"status": cmd_status, "cache-list": cmd_cache_list, "cache-flush": cmd_cache_flush}[args.command](args)
+    commands = {
+        "status": cmd_status, 
+        "modules": cmd_modules,
+        "schema": cmd_schema,
+        "cache-list": cmd_cache_list, 
+        "cache-flush": cmd_cache_flush
+    }
+    commands[args.command](args)
 
 
 if __name__ == "__main__":
