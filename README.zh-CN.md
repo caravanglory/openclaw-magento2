@@ -19,10 +19,16 @@
 
 ## 📦 安装
 
-在您的 OpenClaw 环境中安装此技能：
+**通过 ClawHub 安装：**
 
 ```bash
-openclaw install https://github.com/caravanglory/openclaw-magento2
+openclaw skills install magento2
+```
+
+**手动安装：**
+
+```bash
+git clone https://github.com/caravanglory/openclaw-magento2 ~/.openclaw/workspace/skills/magento2
 ```
 
 ## ⚙️ 配置
@@ -56,6 +62,20 @@ MAGENTO_DEBUG=0
 - “我的 Magento 商店安装了哪些自定义模块？”
 - “探索博客模块的 REST API 架构。”
 - “刷新 Magento 缓存。”
+
+## ⚡ 快速开始（60 秒冒烟测试）
+
+安装并配置环境变量后：
+
+```bash
+# 验证 API 连接
+python3 scripts/system.py status
+
+# 列出最近的订单
+python3 scripts/orders.py list --limit 5
+```
+
+如果两个命令都返回数据，说明一切就绪。
 
 ## 📄 许可证
 

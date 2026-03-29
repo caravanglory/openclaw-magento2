@@ -115,7 +115,7 @@ def cmd_cancel(args):
         result = client.post(f"orders/{order_id}/cancel", {})
     except MagentoAPIError as e:
         print_error_and_exit(e)
-    print(f"Order {args.order_id} cancelled successfully.")
+    print(f"Order {args.order_id} canceled successfully.")
 
 
 def cmd_ship(args):
@@ -154,7 +154,9 @@ def main():
 
     p_list = sub.add_parser("list", help="List recent orders")
     p_list.add_argument("--limit", type=int, default=20)
-    p_list.add_argument("--status", choices=["pending", "processing", "complete", "cancelled", "holded", "payment_review"])
+    # Magento uses American spelling "canceled"; accept "cancelled" as alias
+    status_choices = ["pending", "processing", "complete", "canceled", "closed", "holded", "payment_review"]
+    p_list.add_argument("--status", choices=status_choices, type=lambda s: "canceled" if s == "cancelled" else s)
 
     p_get = sub.add_parser("get", help="Get a single order by entity ID")
     p_get.add_argument("order_id")

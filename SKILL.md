@@ -61,7 +61,7 @@ Run scripts with: `python3 <skill_dir>/scripts/<script>.py [args]`
 
 ```
 # List recent orders (default: last 20)
-python3 orders.py list [--limit N] [--status pending|processing|complete|cancelled]
+python3 orders.py list [--limit N] [--status pending|processing|complete|canceled|closed|holded|payment_review]
 
 # Get a single order
 python3 orders.py get <order_id>
@@ -217,8 +217,8 @@ If a script fails, read stderr, extract the `message` field, and tell the user p
 ## Rules
 
 - Never expose OAuth credentials in chat output, logs, or summaries.
-- For destructive operations (cancel order, delete product, disable promotion), confirm with the user before running the script.
-- Always show the user the exact script invocation you are about to run before executing it.
+- For any **write operation** (cancel, delete, update-price, update-status, update-group, cache-flush, ship, invoice, create-coupon, disable, and all POST/PUT/DELETE via custom_api.py), always repeat the full command back to the user and wait for explicit confirmation before executing.
+- **Read-only operations** (list, get, search, check, status, modules, schema, cache-list, reports) may be executed directly without confirmation.
 - When a date range is not specified for reports, default to the last 30 days.
 - Monetary values are returned in the store's base currency — include the currency code in output.
 - **Production Safety**: After performing updates to products or prices, it is recommended to run `system.py cache-flush` if the changes don't appear on the frontend.

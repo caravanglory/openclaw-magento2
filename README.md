@@ -19,10 +19,16 @@ Manage your Magento 2 or Adobe Commerce store directly from **OpenClaw**. This s
 
 ## 📦 Installation
 
-To install this skill in your OpenClaw environment:
+**Via ClawHub:**
 
 ```bash
-openclaw install https://github.com/caravanglory/openclaw-magento2
+openclaw skills install magento2
+```
+
+**Manual install:**
+
+```bash
+git clone https://github.com/caravanglory/openclaw-magento2 ~/.openclaw/workspace/skills/magento2
 ```
 
 ## ⚙️ Configuration
@@ -56,6 +62,20 @@ Once installed, you can talk to OpenClaw naturally:
 - "What custom modules are installed on my Magento store?"
 - "Explore the REST API schema for the blog module."
 - "Flush the Magento cache."
+
+## ⚡ Quick Start (60-second smoke test)
+
+After installation and configuration:
+
+```bash
+# Verify API connection
+python3 scripts/system.py status
+
+# List recent orders
+python3 scripts/orders.py list --limit 5
+```
+
+If both commands return data, you're good to go.
 
 ## 📄 License
 
