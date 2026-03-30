@@ -1,4 +1,10 @@
-# OpenClaw Magento 2 Skill
+# OpenClaw Magento 2
+
+**Magento 2, operated by conversation.**
+
+AI copilot for Magento 2 in OpenClaw — inspect, diagnose, and operate your store with natural language.
+
+OpenClaw Magento 2 turns your Magento / Adobe Commerce store into a conversational operations workspace. Instead of clicking through multiple admin panels, you can ask for store health, investigate order or inventory issues, run reports, and safely preview changes before execution.
 
 <div align="center">
 
@@ -13,7 +19,6 @@
 
 [中文](./README.zh-CN.md) | [English](./README.md)
 
-Manage your Magento 2 or Adobe Commerce store directly from **OpenClaw**. This skill allows your AI agent to interact with your store's REST API to manage orders, catalog, customers, inventory, and promotions.
 
 ## Ask your store anything
 
