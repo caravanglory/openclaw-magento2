@@ -252,18 +252,22 @@ def parse_csv_input(csv_path: str | None, items_str: str | None,
     import csv
 
     if csv_path:
-        with open(csv_path, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            rows = []
-            for row in reader:
-                parsed = {}
-                for col in expected_columns:
-                    val = row.get(col, "").strip()
-                    if val:
-                        parsed[col] = val
-                if parsed:
-                    rows.append(parsed)
-            return rows
+        try:
+            with open(csv_path, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                rows = []
+                for row in reader:
+                    parsed = {}
+                    for col in expected_columns:
+                        val = row.get(col, "").strip()
+                        if val:
+                            parsed[col] = val
+                    if parsed:
+                        rows.append(parsed)
+                return rows
+        except OSError as e:
+            print(f"Error: could not read CSV file '{csv_path}': {e}", file=sys.stderr)
+            sys.exit(1)
 
     if items_str:
         rows = []
