@@ -184,31 +184,41 @@ def list_configured_sites() -> tuple[list[str], bool]:
 # ---------------------------------------------------------------------------
 
 def fetch_all(client, resource: str, filters: list | None = None,
-              max_pages: int = 50, page_size: int = 200) -> list[dict]:
+              max_pages: int | None = 50, page_size: int = 200) -> list[dict]:
     """Fetch all pages for a given resource.
 
     Safety guardrails:
     - max_pages limits pagination (default 50 pages = 10,000 items)
+    - Set max_pages=None to disable the limit (may be needed for very large catalogs)
     - Avoids infinite loops or OOM for large catalogs
     """
     all_items: list[dict] = []
     page = 1
     result: dict = {}
-    while page <= max_pages:
-        result = client.search(resource, filters=filters, page_size=page_size, current_page=page)
+    while True:
+        result = client.search(
+            resource,
+            filters=filters,
+            page_size=page_size,
+            current_page=page,
+        )
         items = result.get("items", [])
         all_items.extend(items)
+        # Stop when we've fetched all reported items or the API returns no items.
         if len(all_items) >= result.get("total_count", 0) or not items:
             break
         page += 1
-    else:
-        total = result.get("total_count", "unknown")
-        warnings.warn(
-            f"fetch_all: reached max_pages={max_pages} limit. "
-            f"Fetched {len(all_items)} of {total} total items. "
-            f"Results are truncated — consider narrowing filters.",
-            stacklevel=2,
-        )
+        # Enforce max_pages guardrail only when it is explicitly set.
+        if max_pages is not None and page > max_pages:
+            total = result.get("total_count", "unknown")
+            warnings.warn(
+                f"fetch_all: reached max_pages={max_pages} limit. "
+                f"Fetched {len(all_items)} of {total} total items. "
+                f"Results are truncated — consider narrowing filters "
+                f"or calling fetch_all(..., max_pages=None) for no limit.",
+                stacklevel=2,
+            )
+            break
     return all_items
 
 
