@@ -1,6 +1,17 @@
 # OpenClaw Magento 2 Skill
 
-[简体中文](./README.zh-CN.md)
+<div align="center">
+
+[![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![OpenClaw](https://img.shields.io/badge/Platform-OpenClaw-blue)](https://github.com/caravanglory/openclaw-magento2)
+[![CI](https://img.shields.io/github/actions/workflow/status/caravanglory/openclaw-magento2/python-app.yml?branch=main)](https://github.com/caravanglory/openclaw-magento2/actions)
+[![Linting](https://img.shields.io/badge/Linter-Ruff-FCC21B?logo=ruff&logoColor=black)](https://docs.astral.sh/ruff/)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
+
+</div>
+
+[中文](./README.zh-CN.md) | [English](./README.md)
 
 Manage your Magento 2 or Adobe Commerce store directly from **OpenClaw**. This skill allows your AI agent to interact with your store's REST API to manage orders, catalog, customers, inventory, and promotions.
 
