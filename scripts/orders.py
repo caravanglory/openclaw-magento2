@@ -176,7 +176,7 @@ def cmd_bulk_ship(args):
             order = client.get(f"orders/{entity_id}")
             status = order.get("status", "")
             increment_id = order.get("increment_id", order_ref)
-            can_ship = status in ("processing", "invoiceed")
+            can_ship = status in ("processing", "invoiced")
             preview_rows.append([
                 increment_id, status, track, carrier,
                 "✓" if can_ship else f"✗ ({status})",
