@@ -196,8 +196,16 @@ def cmd_bulk_update_price(args):
             continue
         current = float(current)
         price_map[sku] = (current, new_price)
-        change_pct = ((new_price - current) / current * 100) if current else 0
-        preview_rows.append([sku, f"{current:.2f}", f"{new_price:.2f}", f"{change_pct:+.1f}%"])
+        if current:
+            change_pct = (new_price - current) / current * 100
+            change_str = f"{change_pct:+.1f}%"
+        else:
+            # When current price is 0, percentage change is undefined; show absolute delta instead.
+            if new_price == current:
+                change_str = "+0.0%"
+            else:
+                change_str = f"{(new_price - current):+.2f}"
+        preview_rows.append([sku, f"{current:.2f}", f"{new_price:.2f}", change_str])
 
     print("Price Change Preview:")
     print(tabulate(preview_rows, headers=["SKU", "Current Price", "New Price", "Change"], tablefmt="github"))
