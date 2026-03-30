@@ -121,27 +121,33 @@ def cmd_inventory_risk(args):
             "Issue": issue,
         })
 
-    # 4. MSI check (optional)
+    # 4. MSI check (optional) — batch in chunks of 50 (API limit for "in" filter)
+    msi_checked = 0
     try:
-        source_items = client.search("inventory/source-items", filters=[
-            {"field": "sku", "value": ",".join(low_stock_skus[:50]), "condition_type": "in"},
-        ], page_size=200)
-        # Check for SKUs only on disabled sources
-        sku_sources: dict[str, list] = defaultdict(list)
-        for si in source_items.get("items", []):
-            sku_sources[si.get("sku", "")].append(si)
+        chunk_size = 50
+        for offset in range(0, len(low_stock_skus), chunk_size):
+            chunk = low_stock_skus[offset:offset + chunk_size]
+            source_items = client.search("inventory/source-items", filters=[
+                {"field": "sku", "value": ",".join(chunk), "condition_type": "in"},
+            ], page_size=200)
+            sku_sources: dict[str, list] = defaultdict(list)
+            for si in source_items.get("items", []):
+                sku_sources[si.get("sku", "")].append(si)
+            msi_checked += len(chunk)
 
-        for sku, sources in sku_sources.items():
-            all_disabled = all(not s.get("status") for s in sources)
-            if all_disabled and sources:
-                # Add note to existing row
-                for r in rows:
-                    if r["SKU"] == sku:
-                        r["Issue"] = (r["Issue"] + "; All sources disabled").strip("; ")
-                        if r["Severity"] not in ("CRITICAL",):
-                            r["Severity"] = "HIGH"
+            for sku, sources in sku_sources.items():
+                all_disabled = all(not s.get("status") for s in sources)
+                if all_disabled and sources:
+                    for r in rows:
+                        if r["SKU"] == sku:
+                            r["Issue"] = (r["Issue"] + "; All sources disabled").strip("; ")
+                            if r["Severity"] not in ("CRITICAL",):
+                                r["Severity"] = "HIGH"
     except MagentoAPIError:
         pass  # MSI not available, skip
+
+    if msi_checked < len(low_stock_skus):
+        print(f"Warning: MSI check covered {msi_checked} of {len(low_stock_skus)} SKUs.", file=sys.stderr)
 
     # 5. Check enabled products with qty=0 and no backorders
     try:
@@ -386,7 +392,7 @@ def cmd_order_exceptions(args):
     try:
         recent_cancel = client.search("orders", filters=[
             {"field": "status", "value": "canceled", "condition_type": "eq"},
-            {"field": "created_at", "value": cancel_24h_start, "condition_type": "gteq"},
+            {"field": "updated_at", "value": cancel_24h_start, "condition_type": "gteq"},
         ], page_size=1)
         recent_cancel_count = recent_cancel.get("total_count", 0)
 
@@ -395,7 +401,7 @@ def cmd_order_exceptions(args):
         try:
             week_cancel = client.search("orders", filters=[
                 {"field": "status", "value": "canceled", "condition_type": "eq"},
-                {"field": "created_at", "value": week_ago_start, "condition_type": "gteq"},
+                {"field": "updated_at", "value": week_ago_start, "condition_type": "gteq"},
             ], page_size=1)
             week_cancel_count = week_cancel.get("total_count", 0)
             daily_avg = week_cancel_count / 7

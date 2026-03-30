@@ -4,12 +4,14 @@
 import sys
 import time
 import argparse
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from magento_client import (
     get_client, MagentoAPIError,
     fetch_all, utc_range, env_default, SectionResult, render_sections,
+    _section_to_dict,
 )
 
 try:
@@ -160,7 +162,6 @@ def _section_promotions(client) -> SectionResult:
     except MagentoAPIError as e:
         return SectionResult("Promotion Status", "error", time.monotonic() - t0, error=str(e))
 
-    from datetime import datetime, timezone
     utc_now = datetime.now(timezone.utc)
 
     expired = []
@@ -218,8 +219,7 @@ def _section_customers(client, hours: int) -> SectionResult:
     start, end = utc_range(hours)
 
     # Previous period for comparison
-    from datetime import timedelta, timezone, datetime as dt_cls
-    utc_end = dt_cls.now(timezone.utc)
+    utc_end = datetime.now(timezone.utc)
     utc_start = utc_end - timedelta(hours=hours)
     prev_start = utc_start - timedelta(hours=hours)
 
@@ -328,32 +328,15 @@ def cmd_brief(args):
 
     if fmt == "json":
         all_sections = sections + [findings_section]
-        from datetime import timezone
-        from datetime import datetime as dt_cls
         output = {
-            "generated_at": dt_cls.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "total_elapsed_seconds": round(total_elapsed, 1),
-            "sections": [],
+            "sections": [_section_to_dict(s) for s in all_sections],
         }
-        for s in all_sections:
-            entry: dict = {
-                "title": s.title,
-                "status": s.status,
-                "elapsed_seconds": round(s.elapsed_seconds, 1),
-            }
-            if s.rows is not None:
-                entry["rows"] = s.rows
-            if s.findings is not None:
-                entry["findings"] = s.findings
-            if s.error is not None:
-                entry["error"] = s.error
-            output["sections"].append(entry)
         import json
         print(json.dumps(output, indent=2, ensure_ascii=False))
     else:
-        from datetime import timezone
-        from datetime import datetime as dt_cls
-        print(f"Data as of {dt_cls.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} | Generated in {total_elapsed:.1f}s\n")
+        print(f"Data as of {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} | Generated in {total_elapsed:.1f}s\n")
         print(render_sections(sections, format="markdown"))
         print("## Key Findings")
         for f in key_findings or ["Nothing requiring immediate attention."]:
@@ -363,18 +346,15 @@ def cmd_brief(args):
 def main():
     parser = argparse.ArgumentParser(description="Magento 2 Morning Brief")
     parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    p_brief = sub.add_parser("brief", help="Generate morning brief")
-    p_brief.add_argument("--hours", type=int, default=None,
+    parser.add_argument("--hours", type=int, default=None,
                          help="Time window in hours (default: 24)")
-    p_brief.add_argument("--stock-threshold", type=int, default=None,
+    parser.add_argument("--stock-threshold", type=int, default=None,
                          help="Low stock threshold (default: 10)")
-    p_brief.add_argument("--format", choices=["markdown", "json"], default="markdown",
+    parser.add_argument("--format", choices=["markdown", "json"], default="markdown",
                          help="Output format (default: markdown)")
 
     args = parser.parse_args()
-    {"brief": cmd_brief}[args.command](args)
+    cmd_brief(args)
 
 
 if __name__ == "__main__":

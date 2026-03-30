@@ -252,6 +252,10 @@ def parse_csv_input(csv_path: str | None, items_str: str | None,
           * Colon-separated positional values (e.g. "VAL1:VAL2[:VAL3...]"),
             assigned to expected_columns in order.
 
+    Note: inline format uses colons as delimiters, so values containing
+    colons (e.g. SKUs like "CONFIG:RED:L") cannot be used inline.
+    Use --csv instead for such cases.
+
     Returns list of dicts with keys drawn from expected_columns.
     """
     import csv
@@ -308,24 +312,27 @@ class SectionResult:
     error: str | None = None
 
 
+def _section_to_dict(s: SectionResult) -> dict:
+    """Convert a SectionResult to a JSON-friendly dict."""
+    entry = {
+        "title": s.title,
+        "status": s.status,
+        "elapsed_seconds": round(s.elapsed_seconds, 1),
+    }
+    if s.rows is not None:
+        entry["rows"] = s.rows
+    if s.findings is not None:
+        entry["findings"] = s.findings
+    if s.error is not None:
+        entry["error"] = s.error
+    return entry
+
+
 def render_sections(sections: list[SectionResult], format: str = "markdown") -> str:
     """Render sections as markdown (human) or JSON (AI agent consumption)."""
     if format == "json":
-        data = []
-        for s in sections:
-            entry = {
-                "title": s.title,
-                "status": s.status,
-                "elapsed_seconds": round(s.elapsed_seconds, 1),
-            }
-            if s.rows is not None:
-                entry["rows"] = s.rows
-            if s.findings is not None:
-                entry["findings"] = s.findings
-            if s.error is not None:
-                entry["error"] = s.error
-            data.append(entry)
-        return json.dumps(data, indent=2, ensure_ascii=False)
+        return json.dumps([_section_to_dict(s) for s in sections],
+                          indent=2, ensure_ascii=False)
 
     # Markdown output
     lines: list[str] = []
@@ -335,14 +342,13 @@ def render_sections(sections: list[SectionResult], format: str = "markdown") -> 
         if s.error:
             lines.append(f"Error: {s.error}")
         elif s.rows:
-            if s.rows:
-                headers = list(s.rows[0].keys())
-                row_data = [[r.get(h, "") for h in headers] for r in s.rows]
-                try:
-                    from tabulate import tabulate
-                    lines.append(tabulate(row_data, headers=headers, tablefmt="github"))
-                except ImportError:
-                    lines.append(str(row_data))
+            headers = list(s.rows[0].keys())
+            row_data = [[r.get(h, "") for h in headers] for r in s.rows]
+            try:
+                from tabulate import tabulate
+                lines.append(tabulate(row_data, headers=headers, tablefmt="github"))
+            except ImportError:
+                lines.append(str(row_data))
         elif s.findings:
             for f in s.findings:
                 lines.append(f"- {f}")

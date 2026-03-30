@@ -325,16 +325,17 @@ def cmd_bulk_update(args):
         print(f"\n{len(update_map)} item(s) would be updated. Run with --execute to apply changes.")
         return
 
-    # Execute
+    # Execute — send minimal payload to avoid overwriting concurrent changes
     success = 0
     failed: list[tuple[str, str]] = []
     for sku, (old_qty, new_qty, item_id) in update_map.items():
         try:
-            current = client.get(f"stockItems/{sku}")
-            current["qty"] = new_qty
-            current["is_in_stock"] = new_qty > 0
-            iid = current.get("item_id", item_id)
-            client.put(f"products/{sku}/stockItems/{iid}", {"stockItem": current})
+            client.put(f"products/{sku}/stockItems/{item_id}", {
+                "stockItem": {
+                    "qty": new_qty,
+                    "is_in_stock": new_qty > 0,
+                },
+            })
             success += 1
         except MagentoAPIError as e:
             failed.append((sku, str(e)))
