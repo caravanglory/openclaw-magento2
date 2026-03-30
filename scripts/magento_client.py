@@ -6,8 +6,11 @@ All other scripts import MagentoClient from here.
 import os
 import sys
 import json
+import warnings
 import logging
 import urllib.parse
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 try:
@@ -174,3 +177,180 @@ def list_configured_sites() -> tuple[list[str], bool]:
     )
     has_default = bool(os.environ.get("MAGENTO_BASE_URL"))
     return sites, has_default
+
+
+# ---------------------------------------------------------------------------
+# Shared utility functions
+# ---------------------------------------------------------------------------
+
+def fetch_all(client, resource: str, filters: list | None = None,
+              max_pages: int | None = 50, page_size: int = 200) -> list[dict]:
+    """Fetch all pages for a given resource.
+
+    Safety guardrails:
+    - max_pages limits pagination (default 50 pages = 10,000 items)
+    - Set max_pages=None to disable the limit (may be needed for very large catalogs)
+    - Avoids infinite loops or OOM for large catalogs
+    """
+    all_items: list[dict] = []
+    page = 1
+    result: dict = {}
+    while True:
+        result = client.search(
+            resource,
+            filters=filters,
+            page_size=page_size,
+            current_page=page,
+        )
+        items = result.get("items", [])
+        all_items.extend(items)
+        # Stop when we've fetched all reported items or the API returns no items.
+        if len(all_items) >= result.get("total_count", 0) or not items:
+            break
+        page += 1
+        # Enforce max_pages guardrail only when it is explicitly set.
+        if max_pages is not None and page > max_pages:
+            total = result.get("total_count", "unknown")
+            warnings.warn(
+                f"fetch_all: reached max_pages={max_pages} limit. "
+                f"Fetched {len(all_items)} of {total} total items. "
+                f"Results are truncated — consider narrowing filters "
+                f"or calling fetch_all(..., max_pages=None) for no limit.",
+                stacklevel=2,
+            )
+            break
+    return all_items
+
+
+def utc_range(hours: int = 24) -> tuple[str, str]:
+    """Return (start, end) UTC datetime strings for the last N hours."""
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(hours=hours)
+    return start.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def env_default(env_key: str, cli_value, hardcoded_default):
+    """Read config with priority: CLI arg > env var > hardcoded default."""
+    if cli_value is not None:
+        return cli_value
+    env_val = os.environ.get(env_key)
+    if env_val is not None:
+        return type(hardcoded_default)(env_val)
+    return hardcoded_default
+
+
+def parse_csv_input(csv_path: str | None, items_str: str | None,
+                    expected_columns: list[str]) -> list[dict]:
+    """Parse bulk input from CSV file or inline comma/colon-delimited string.
+
+    CSV format: header row matching expected_columns, then data rows.
+
+    Inline format:
+      - Comma-separated entries.
+      - Each entry may be:
+          * A single value, mapped to the first expected column.
+          * Colon-separated positional values (e.g. "VAL1:VAL2[:VAL3...]"),
+            assigned to expected_columns in order.
+
+    Note: inline format uses colons as delimiters, so values containing
+    colons (e.g. SKUs like "CONFIG:RED:L") cannot be used inline.
+    Use --csv instead for such cases.
+
+    Returns list of dicts with keys drawn from expected_columns.
+    """
+    import csv
+
+    if csv_path:
+        try:
+            with open(csv_path, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                rows = []
+                for row in reader:
+                    parsed = {}
+                    for col in expected_columns:
+                        val = row.get(col, "").strip()
+                        if val:
+                            parsed[col] = val
+                    if parsed:
+                        rows.append(parsed)
+                return rows
+        except OSError as e:
+            print(f"Error: could not read CSV file '{csv_path}': {e}", file=sys.stderr)
+            sys.exit(1)
+
+    if items_str:
+        rows = []
+        for entry in items_str.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            if ":" in entry:
+                parts = entry.split(":", maxsplit=len(expected_columns) - 1)
+                row = {}
+                for i, col in enumerate(expected_columns):
+                    if i < len(parts):
+                        row[col] = parts[i].strip()
+                rows.append(row)
+            else:
+                rows.append({expected_columns[0]: entry})
+        return rows
+
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Structured output protocol for Morning Brief and Diagnose
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SectionResult:
+    title: str
+    status: str  # "ok" | "warning" | "error" | "skipped"
+    elapsed_seconds: float = 0.0
+    rows: list[dict] | None = None
+    findings: list[str] | None = None
+    error: str | None = None
+
+
+def _section_to_dict(s: SectionResult) -> dict:
+    """Convert a SectionResult to a JSON-friendly dict."""
+    entry = {
+        "title": s.title,
+        "status": s.status,
+        "elapsed_seconds": round(s.elapsed_seconds, 1),
+    }
+    if s.rows is not None:
+        entry["rows"] = s.rows
+    if s.findings is not None:
+        entry["findings"] = s.findings
+    if s.error is not None:
+        entry["error"] = s.error
+    return entry
+
+
+def render_sections(sections: list[SectionResult], format: str = "markdown") -> str:
+    """Render sections as markdown (human) or JSON (AI agent consumption)."""
+    if format == "json":
+        return json.dumps([_section_to_dict(s) for s in sections],
+                          indent=2, ensure_ascii=False)
+
+    # Markdown output
+    lines: list[str] = []
+    for s in sections:
+        status_icon = {"ok": "✓", "warning": "⚠", "error": "✗", "skipped": "—"}.get(s.status, "")
+        lines.append(f"## {s.title} [{s.elapsed_seconds:.1f}s] {status_icon}")
+        if s.error:
+            lines.append(f"Error: {s.error}")
+        elif s.rows:
+            headers = list(s.rows[0].keys())
+            row_data = [[r.get(h, "") for h in headers] for r in s.rows]
+            try:
+                from tabulate import tabulate
+                lines.append(tabulate(row_data, headers=headers, tablefmt="github"))
+            except ImportError:
+                lines.append(str(row_data))
+        elif s.findings:
+            for f in s.findings:
+                lines.append(f"- {f}")
+        lines.append("")
+    return "\n".join(lines)

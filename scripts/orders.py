@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Orders management — list, get, update status, cancel."""
+"""Orders management — list, get, update status, cancel, ship, invoice."""
 
 import sys
-import json
+import time
 import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit
+from magento_client import get_client, MagentoAPIError, print_error_and_exit, env_default, parse_csv_input
 
 try:
     from tabulate import tabulate
@@ -148,6 +148,81 @@ def cmd_invoice(args):
     print(f"Invoice created and captured for order {args.order_id}.")
 
 
+def cmd_bulk_ship(args):
+    client = get_client(args.site)
+    delay_ms = env_default("OPENCLAW_DELAY_MS", args.delay_ms, 200)
+
+    items = parse_csv_input(args.csv, None, ["order_id", "track_number", "carrier_code"])
+    if not items:
+        print("No items provided. Use --csv.")
+        sys.exit(1)
+
+    if len(items) > 20:
+        print(f"Warning: {len(items)} orders in batch — may trigger rate limiting.")
+
+    # Preview: resolve order IDs and check statuses
+    preview_rows = []
+    shippable: list[tuple[str, str, str, str]] = []  # (entity_id, increment_id, track, carrier)
+
+    for item in items:
+        order_ref = item.get("order_id", "")
+        track = item.get("track_number", "")
+        carrier = item.get("carrier_code", "custom")
+        if not order_ref:
+            continue
+
+        entity_id = resolve_order_id(client, order_ref)
+        try:
+            order = client.get(f"orders/{entity_id}")
+            status = order.get("status", "")
+            increment_id = order.get("increment_id", order_ref)
+            can_ship = status in ("processing", "invoiced")
+            preview_rows.append([
+                increment_id, status, track, carrier,
+                "✓" if can_ship else f"✗ ({status})",
+            ])
+            if can_ship:
+                shippable.append((entity_id, increment_id, track, carrier))
+        except MagentoAPIError as e:
+            preview_rows.append([order_ref, "ERROR", track, carrier, f"✗ ({e})"])
+
+    print("Shipment Preview:")
+    print(tabulate(preview_rows,
+                   headers=["Order", "Status", "Track", "Carrier", "Can Ship?"],
+                   tablefmt="github"))
+
+    if not args.execute:
+        print(f"\n{len(shippable)} order(s) would be shipped. Run with --execute to apply.")
+        return
+
+    # Execute
+    success = 0
+    skipped = len(items) - len(shippable)
+    failed: list[tuple[str, str]] = []
+
+    for entity_id, increment_id, track, carrier in shippable:
+        body: dict = {"items": [], "notify": True}
+        if track:
+            body["tracks"] = [{
+                "track_number": track,
+                "carrier_code": carrier,
+                "title": "Shipment Tracking",
+            }]
+        try:
+            client.post(f"order/{entity_id}/ship", body)
+            success += 1
+        except MagentoAPIError as e:
+            failed.append((increment_id, str(e)))
+        if delay_ms > 0:
+            time.sleep(delay_ms / 1000.0)
+
+    print(f"\nShipped: {success} | Skipped: {skipped} | Failed: {len(failed)} | Total: {len(items)}")
+    if failed:
+        print("\nFailed items:")
+        for order_id, err in failed:
+            print(f"  {order_id}: {err}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Magento 2 order management")
     parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
@@ -178,9 +253,15 @@ def main():
     p_invoice = sub.add_parser("invoice", help="Invoice an order")
     p_invoice.add_argument("order_id")
 
+    p_bulk_ship = sub.add_parser("bulk-ship", help="Bulk ship orders from CSV")
+    p_bulk_ship.add_argument("--csv", default=None, help="CSV file (order_id,track_number,carrier_code)")
+    p_bulk_ship.add_argument("--execute", action="store_true", help="Execute shipments (default: preview only)")
+    p_bulk_ship.add_argument("--delay-ms", type=int, default=None, help="Delay between writes in ms (default: 200)")
+
     args = parser.parse_args()
     {"list": cmd_list, "get": cmd_get, "update-status": cmd_update_status,
-     "cancel": cmd_cancel, "ship": cmd_ship, "invoice": cmd_invoice}[args.command](args)
+     "cancel": cmd_cancel, "ship": cmd_ship, "invoice": cmd_invoice,
+     "bulk-ship": cmd_bulk_ship}[args.command](args)
 
 
 if __name__ == "__main__":

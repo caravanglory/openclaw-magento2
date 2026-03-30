@@ -2,11 +2,12 @@
 """Inventory management — stock levels, updates, low-stock alerts."""
 
 import sys
+import time
 import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit
+from magento_client import get_client, MagentoAPIError, print_error_and_exit, env_default, parse_csv_input
 
 try:
     from tabulate import tabulate
@@ -254,6 +255,100 @@ def cmd_stocks(args):
     print(f"\n{len(items)} stock(s).")
 
 
+def cmd_bulk_update(args):
+    client = get_client(args.site)
+    delay_ms = env_default("OPENCLAW_DELAY_MS", args.delay_ms, 200)
+
+    items = parse_csv_input(args.csv, args.items, ["sku", "qty"])
+    if not items:
+        print("No items provided. Use --csv or --items.")
+        sys.exit(1)
+
+    # Validate quantities
+    parsed: list[tuple[str, float]] = []
+    for item in items:
+        sku = item.get("sku", "")
+        qty_str = item.get("qty", "")
+        if not sku or not qty_str:
+            print(f"Skipping invalid entry: {item}")
+            continue
+        try:
+            qty = float(qty_str)
+        except ValueError:
+            print(f"Skipping {sku}: invalid qty '{qty_str}'")
+            continue
+        parsed.append((sku, qty))
+
+    if not parsed:
+        print("No valid items to process.")
+        return
+
+    if len(parsed) > 20:
+        print(f"Warning: {len(parsed)} items in batch — may trigger rate limiting.")
+
+    # Preview: batch fetch current stock
+    skus = [sku for sku, _ in parsed]
+    try:
+        result = client.search("stockItems", filters=[
+            {"field": "sku", "value": ",".join(skus), "condition_type": "in"},
+        ], page_size=len(skus))
+        existing = {}
+        existing_ids = {}
+        for i in result.get("items", []):
+            existing[i.get("sku")] = i.get("qty", 0)
+            existing_ids[i.get("sku")] = i.get("item_id")
+    except MagentoAPIError as e:
+        print_error_and_exit(e)
+        return
+
+    # Build preview table
+    preview_rows = []
+    update_map: dict[str, tuple[float, float, str]] = {}
+    for sku, new_qty in parsed:
+        current = existing.get(sku)
+        if current is None:
+            preview_rows.append([sku, "NOT FOUND", new_qty, "N/A"])
+            continue
+        current = float(current)
+        item_id = existing_ids.get(sku)
+        update_map[sku] = (current, new_qty, item_id)
+        preview_rows.append([sku, current, new_qty, f"{new_qty - current:+.0f}"])
+
+    print("Stock Update Preview:")
+    print(tabulate(preview_rows, headers=["SKU", "Current Qty", "New Qty", "Change"], tablefmt="github"))
+
+    not_found = [sku for sku, _ in parsed if sku not in existing]
+    if not_found:
+        print(f"\nNot found: {', '.join(not_found)}")
+
+    if not args.execute:
+        print(f"\n{len(update_map)} item(s) would be updated. Run with --execute to apply changes.")
+        return
+
+    # Execute — send minimal payload to avoid overwriting concurrent changes
+    success = 0
+    failed: list[tuple[str, str]] = []
+    for sku, (old_qty, new_qty, item_id) in update_map.items():
+        try:
+            client.put(f"products/{sku}/stockItems/{item_id}", {
+                "stockItem": {
+                    "qty": new_qty,
+                    "is_in_stock": new_qty > 0,
+                },
+            })
+            success += 1
+        except MagentoAPIError as e:
+            failed.append((sku, str(e)))
+        if delay_ms > 0:
+            time.sleep(delay_ms / 1000.0)
+
+    print(f"\nUpdated: {success} | Failed: {len(failed)} | Total: {len(update_map)}")
+    if failed:
+        print("\nFailed items:")
+        for sku, err in failed:
+            print(f"  {sku}: {err}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Magento 2 inventory management")
     parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
@@ -300,6 +395,12 @@ def main():
     p_stocks = sub.add_parser("stocks", help="List inventory stocks (MSI)")
     p_stocks.add_argument("--limit", type=int, default=50)
 
+    p_bulk = sub.add_parser("bulk-update", help="Bulk update stock quantities")
+    p_bulk.add_argument("--csv", default=None, help="CSV file (sku,qty)")
+    p_bulk.add_argument("--items", default=None, help="Inline: SKU1:100,SKU2:50")
+    p_bulk.add_argument("--execute", action="store_true", help="Execute changes (default: preview only)")
+    p_bulk.add_argument("--delay-ms", type=int, default=None, help="Delay between writes in ms (default: 200)")
+
     args = parser.parse_args()
     {
         "check": cmd_check,
@@ -313,6 +414,7 @@ def main():
         "salable-qty": cmd_salable_qty,
         "is-salable": cmd_is_salable,
         "stocks": cmd_stocks,
+        "bulk-update": cmd_bulk_update,
     }[args.command](args)
 
 

@@ -6,8 +6,10 @@ description: >
   discover and interact with custom modules (like blogs) by exploring the
   system's modules and REST schema. Triggers on requests like "show me today's
   orders", "update product stock", "check installed modules", "call custom api",
-  or anything referencing a Magento store.
-version: 1.0.0
+  "morning brief", "store health", "inventory risk", "stockout", "promotion audit",
+  "stuck orders", "order exceptions", "pricing issues", or anything referencing
+  a Magento store.
+version: 1.1.0
 metadata:
   openclaw:
     emoji: "🛒"
@@ -256,6 +258,59 @@ python3 custom_api.py GET <path> [--params '{"key": "value"}']
 python3 custom_api.py POST <path> --data '{"body": "json"}'
 ```
 
+### Morning Brief — `scripts/morning_brief.py`
+
+Generate a daily store health summary across sales, orders, inventory, promotions, and customers.
+
+```
+# Generate morning brief (default: last 24 hours)
+python3 morning_brief.py brief [--site SITE] [--hours 24] [--stock-threshold 10]
+
+# JSON output for programmatic consumption
+python3 morning_brief.py brief --format json
+```
+
+### Diagnostics — `scripts/diagnose.py`
+
+Deep-dive analysis for specific store issues.
+
+```
+# Inventory risk radar with velocity-based stockout prediction
+python3 diagnose.py inventory-risk [--days 7] [--threshold 10] [--limit 50]
+
+# Audit promotions for expired rules, missing coupons, exhausted limits
+python3 diagnose.py promotion-audit [--warn-hours 48]
+
+# Find stuck orders (pending too long, payment review, processing delay)
+python3 diagnose.py order-exceptions [--pending-hours 24] [--processing-hours 48]
+
+# Detect pricing anomalies (zero price, negative price, inverted specials)
+python3 diagnose.py pricing-anomaly [--limit 50]
+
+# JSON output available for all subcommands
+python3 diagnose.py inventory-risk --format json
+```
+
+### Bulk Operations
+
+Batch update prices, stock, and shipments via CSV or inline input.
+
+```
+# Bulk update prices (preview mode)
+python3 catalog.py bulk-update-price --items "SKU1:29.99,SKU2:49.99"
+python3 catalog.py bulk-update-price --csv prices.csv
+
+# Execute bulk price changes
+python3 catalog.py bulk-update-price --csv prices.csv --execute
+
+# Bulk update stock
+python3 inventory.py bulk-update --items "SKU1:100,SKU2:50"
+python3 inventory.py bulk-update --csv stock.csv --execute
+
+# Bulk ship orders
+python3 orders.py bulk-ship --csv shipments.csv --execute
+```
+
 ## Output format
 
 All scripts print a UTF-8 table (via `tabulate`) or a JSON summary to stdout. When presenting results to the user, render them as a markdown table. For single-record lookups, format as a definition list.
@@ -278,3 +333,7 @@ If a script fails, read stderr, extract the `message` field, and tell the user p
 - Monetary values are returned in the store's base currency — include the currency code in output.
 - **Multi-site**: When multiple sites are configured, always confirm which site the user intends before executing write operations. Use `system.py sites` to discover available sites.
 - **Production Safety**: After performing updates to products or prices, it is recommended to run `system.py cache-flush` if the changes don't appear on the frontend.
+- **Morning Brief** and **diagnose** commands are read-only — they may be executed directly without confirmation.
+- After generating a morning brief, proactively recommend relevant `diagnose.py` subcommands based on the findings.
+- **Bulk operations**: Always preview first (default), then require `--execute` flag and explicit user confirmation. Follow preview templates in `references/workflows.md`.
+- **Scenarios**: For detailed routing guidance, see `references/workflows.md`.
