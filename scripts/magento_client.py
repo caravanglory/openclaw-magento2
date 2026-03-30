@@ -241,13 +241,18 @@ def env_default(env_key: str, cli_value, hardcoded_default):
 
 def parse_csv_input(csv_path: str | None, items_str: str | None,
                     expected_columns: list[str]) -> list[dict]:
-    """Parse bulk input from CSV file or inline 'KEY1:VAL1,KEY2:VAL2' string.
+    """Parse bulk input from CSV file or inline comma/colon-delimited string.
 
     CSV format: header row matching expected_columns, then data rows.
-    Inline format: comma-separated entries with colon-separated key-value pairs,
-    or single-value entries mapped to the first expected column.
 
-    Returns list of dicts with keys matching expected_columns.
+    Inline format:
+      - Comma-separated entries.
+      - Each entry may be:
+          * A single value, mapped to the first expected column.
+          * Colon-separated positional values (e.g. "VAL1:VAL2[:VAL3...]"),
+            assigned to expected_columns in order.
+
+    Returns list of dicts with keys drawn from expected_columns.
     """
     import csv
 
