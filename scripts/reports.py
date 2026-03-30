@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit
+from magento_client import get_client, MagentoAPIError, print_error_and_exit, fetch_all
 
 try:
     import pandas as pd
@@ -23,20 +23,6 @@ def default_date_range():
     end = datetime.utcnow()
     start = end - timedelta(days=30)
     return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
-
-
-def fetch_all(client, resource: str, filters: list | None = None) -> list[dict]:
-    """Fetch all pages for a given resource and filters."""
-    all_items = []
-    page = 1
-    while True:
-        result = client.search(resource, filters=filters, page_size=200, current_page=page)
-        items = result.get("items", [])
-        all_items.extend(items)
-        if len(all_items) >= result.get("total_count", 0) or not items:
-            break
-        page += 1
-    return all_items
 
 
 def cmd_sales(args):

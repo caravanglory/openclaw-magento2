@@ -2,12 +2,12 @@
 """Catalog management — products and categories."""
 
 import sys
-import json
+import time
 import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit
+from magento_client import get_client, MagentoAPIError, print_error_and_exit, env_default, parse_csv_input
 
 try:
     from tabulate import tabulate
@@ -81,7 +81,7 @@ def cmd_get(args):
 def cmd_update_price(args):
     client = get_client(args.site)
     try:
-        result = client.put(
+        client.put(
             f"products/{args.sku}",
             {"product": {"sku": args.sku, "price": float(args.price)}},
         )
@@ -142,6 +142,95 @@ def cmd_update_status(args):
     print(f"Product {args.sku} status updated to {'Enabled' if status == 1 else 'Disabled'}.")
 
 
+def cmd_bulk_update_price(args):
+    client = get_client(args.site)
+    delay_ms = env_default("OPENCLAW_DELAY_MS", args.delay_ms, 200)
+
+    # Parse input
+    items = parse_csv_input(args.csv, args.items, ["sku", "price"])
+    if not items:
+        print("No items provided. Use --csv or --items.")
+        sys.exit(1)
+
+    # Validate prices
+    parsed: list[tuple[str, float]] = []
+    for item in items:
+        sku = item.get("sku", "")
+        price_str = item.get("price", "")
+        if not sku or not price_str:
+            print(f"Skipping invalid entry: {item}")
+            continue
+        try:
+            price = float(price_str)
+        except ValueError:
+            print(f"Skipping {sku}: invalid price '{price_str}'")
+            continue
+        parsed.append((sku, price))
+
+    if not parsed:
+        print("No valid items to process.")
+        return
+
+    # Large batch warning
+    if len(parsed) > 20:
+        print(f"Warning: {len(parsed)} items in batch — may trigger rate limiting. Consider splitting.")
+
+    # Preview: batch fetch current prices
+    skus = [sku for sku, _ in parsed]
+    try:
+        result = client.search("products", filters=[
+            {"field": "sku", "value": ",".join(skus), "condition_type": "in"},
+        ], page_size=len(skus))
+        existing = {p.get("sku"): p.get("price", 0) for p in result.get("items", [])}
+    except MagentoAPIError as e:
+        print_error_and_exit(e)
+        return
+
+    # Build preview table
+    preview_rows = []
+    price_map = {}
+    for sku, new_price in parsed:
+        current = existing.get(sku)
+        if current is None:
+            preview_rows.append([sku, "NOT FOUND", f"{new_price:.2f}", "N/A"])
+            continue
+        current = float(current)
+        price_map[sku] = (current, new_price)
+        change_pct = ((new_price - current) / current * 100) if current else 0
+        preview_rows.append([sku, f"{current:.2f}", f"{new_price:.2f}", f"{change_pct:+.1f}%"])
+
+    print("Price Change Preview:")
+    print(tabulate(preview_rows, headers=["SKU", "Current Price", "New Price", "Change"], tablefmt="github"))
+
+    not_found = [sku for sku, _ in parsed if sku not in existing]
+    if not_found:
+        print(f"\nNot found: {', '.join(not_found)}")
+
+    if not args.execute:
+        print(f"\n{len(price_map)} item(s) would be updated. Run with --execute to apply changes.")
+        return
+
+    # Execute
+    success = 0
+    failed: list[tuple[str, str]] = []
+    for sku, (old_price, new_price) in price_map.items():
+        try:
+            client.put(f"products/{sku}", {"product": {"sku": sku, "price": new_price}})
+            success += 1
+        except MagentoAPIError as e:
+            failed.append((sku, str(e)))
+        if delay_ms > 0:
+            time.sleep(delay_ms / 1000.0)
+
+    print(f"\nUpdated: {success} | Failed: {len(failed)} | Total: {len(price_map)}")
+    if failed:
+        print("\nFailed items:")
+        for sku, err in failed:
+            print(f"  {sku}: {err}")
+    if success > 0:
+        print("\nTip: run `system.py cache-flush` to reflect price changes on the frontend.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Magento 2 catalog management")
     parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
@@ -172,10 +261,17 @@ def main():
 
     sub.add_parser("categories", help="List category tree")
 
+    p_bulk_price = sub.add_parser("bulk-update-price", help="Bulk update product prices")
+    p_bulk_price.add_argument("--csv", default=None, help="CSV file (sku,price)")
+    p_bulk_price.add_argument("--items", default=None, help="Inline: SKU1:29.99,SKU2:49.99")
+    p_bulk_price.add_argument("--execute", action="store_true", help="Execute changes (default: preview only)")
+    p_bulk_price.add_argument("--delay-ms", type=int, default=None, help="Delay between writes in ms (default: 200)")
+
     args = parser.parse_args()
     {"search": cmd_search, "get": cmd_get, "update-price": cmd_update_price,
      "update-attribute": cmd_update_attribute, "update-status": cmd_update_status,
-     "delete": cmd_delete, "categories": cmd_categories}[args.command](args)
+     "delete": cmd_delete, "categories": cmd_categories,
+     "bulk-update-price": cmd_bulk_update_price}[args.command](args)
 
 
 if __name__ == "__main__":
