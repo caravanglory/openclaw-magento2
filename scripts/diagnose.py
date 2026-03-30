@@ -330,7 +330,7 @@ def cmd_order_exceptions(args):
     rows: list[dict] = []
 
     # 1. Stuck pending
-    pending_cutoff, _ = utc_range(pending_hours + 24)
+    pending_cutoff, _ = utc_range(pending_hours)
     try:
         pending = client.search("orders", filters=[
             {"field": "status", "value": "pending", "condition_type": "eq"},
@@ -364,7 +364,7 @@ def cmd_order_exceptions(args):
         pass
 
     # 3. Processing too long
-    proc_cutoff, _ = utc_range(processing_hours + 24)
+    proc_cutoff, _ = utc_range(processing_hours)
     try:
         processing = client.search("orders", filters=[
             {"field": "status", "value": "processing", "condition_type": "eq"},

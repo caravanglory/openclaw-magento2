@@ -56,16 +56,17 @@ def _section_order_anomalies(client, hours: int) -> SectionResult:
     rows: list[dict] = []
     _, now_str = utc_range(0)
 
-    # 1. Stuck pending (>24h)
-    pending_cutoff_start, _ = utc_range(hours + 24)  # created more than 24h ago
+    # 1. Stuck pending (>hours)
+    pending_cutoff_start, _ = utc_range(hours)  # created more than hours ago
     try:
         pending_result = client.search("orders", filters=[
             {"field": "status", "value": "pending", "condition_type": "eq"},
             {"field": "created_at", "value": pending_cutoff_start, "condition_type": "lteq"},
         ], page_size=50)
         pending_items = pending_result.get("items", [])
-        if pending_items:
-            findings.append(f"{len(pending_items)} order(s) stuck in pending for >{hours}h")
+        pending_count = pending_result.get("total_count", len(pending_items))
+        if pending_count:
+            findings.append(f"{pending_count} order(s) stuck in pending for >{hours}h")
             for o in pending_items[:10]:
                 rows.append({
                     "Order #": o.get("increment_id"),
@@ -83,8 +84,8 @@ def _section_order_anomalies(client, hours: int) -> SectionResult:
             {"field": "status", "value": "payment_review", "condition_type": "eq"},
         ], page_size=50)
         review_items = review_result.get("items", [])
-        if review_items:
-            review_count = review_result.get("total_count", len(review_items))
+        review_count = review_result.get("total_count", len(review_items))
+        if review_count:
             findings.append(f"{review_count} order(s) in payment_review")
             for o in review_items[:10]:
                 rows.append({
