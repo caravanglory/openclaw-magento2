@@ -84,7 +84,8 @@ def _section_order_anomalies(client, hours: int) -> SectionResult:
         ], page_size=50)
         review_items = review_result.get("items", [])
         if review_items:
-            findings.append(f"{len(review_items)} order(s) in payment_review")
+            review_count = review_result.get("total_count", len(review_items))
+            findings.append(f"{review_count} order(s) in payment_review")
             for o in review_items[:10]:
                 rows.append({
                     "Order #": o.get("increment_id"),
