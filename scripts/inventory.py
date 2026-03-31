@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit, env_default, parse_csv_input
+from magento_client import get_client, MagentoAPIError, print_error_and_exit, env_default, parse_csv_input, get_stock_item, search_low_stock_items
 
 try:
     from tabulate import tabulate
@@ -18,7 +18,7 @@ except ImportError:
 def cmd_check(args):
     client = get_client(args.site)
     try:
-        item = client.get(f"stockItems/{args.sku}")
+        item = get_stock_item(client, args.sku)
     except MagentoAPIError as e:
         print_error_and_exit(e)
 
@@ -50,18 +50,10 @@ def cmd_low_stock(args):
     client = get_client(args.site)
     threshold = args.threshold
 
-    # Fetch all enabled, in-catalog products and check their stock
     try:
-        result = client.search(
-            "stockItems",
-            filters=[{"field": "qty", "value": str(threshold), "condition_type": "lteq"},
-                     {"field": "manage_stock", "value": "1", "condition_type": "eq"}],
-            page_size=100,
-        )
+        items = search_low_stock_items(client, threshold)
     except MagentoAPIError as e:
         print_error_and_exit(e)
-
-    items = result.get("items", [])
     if not items:
         print(f"No products below stock threshold of {threshold}.")
         return
@@ -82,18 +74,16 @@ def cmd_bulk_check(args):
         print("No SKUs provided.")
         return
 
-    try:
-        # Use 'in' condition for bulk check
-        result = client.search(
-            "stockItems",
-            filters=[{"field": "sku", "value": ",".join(skus), "condition_type": "in"}],
-            page_size=len(skus)
-        )
-    except MagentoAPIError as e:
-        print_error_and_exit(e)
+    items = []
+    found_skus = set()
+    for sku in skus:
+        try:
+            item = get_stock_item(client, sku)
+            items.append(item)
+            found_skus.add(item.get("sku"))
+        except MagentoAPIError:
+            continue
 
-    items = result.get("items", [])
-    found_skus = {i.get("sku") for i in items}
     rows = [
         [i.get("sku"), i.get("qty"), "Yes" if i.get("is_in_stock") else "No"]
         for i in items
@@ -289,12 +279,13 @@ def cmd_bulk_update(args):
     # Preview: batch fetch current stock
     skus = [sku for sku, _ in parsed]
     try:
-        result = client.search("stockItems", filters=[
-            {"field": "sku", "value": ",".join(skus), "condition_type": "in"},
-        ], page_size=len(skus))
         existing = {}
         existing_ids = {}
-        for i in result.get("items", []):
+        for sku in skus:
+            try:
+                i = client.get(f"stockItems/{sku}")
+            except MagentoAPIError:
+                continue
             existing[i.get("sku")] = i.get("qty", 0)
             existing_ids[i.get("sku")] = i.get("item_id")
     except MagentoAPIError as e:

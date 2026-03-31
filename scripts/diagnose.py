@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from magento_client import (
     get_client, MagentoAPIError, print_error_and_exit,
     fetch_all, utc_range, env_default, SectionResult, render_sections,
+    search_low_stock_items,
 )
 
 try:
@@ -50,11 +51,7 @@ def cmd_inventory_risk(args):
 
     # 1. Get low-stock items
     try:
-        stock_result = client.search("stockItems", filters=[
-            {"field": "qty", "value": str(threshold), "condition_type": "lteq"},
-            {"field": "manage_stock", "value": "1", "condition_type": "eq"},
-        ], page_size=200, sort_field="qty", sort_dir="ASC")
-        stock_items = stock_result.get("items", [])
+        stock_items = search_low_stock_items(client, threshold)
     except MagentoAPIError as e:
         print_error_and_exit(e)
         return
@@ -148,27 +145,6 @@ def cmd_inventory_risk(args):
 
     if msi_checked < len(low_stock_skus):
         print(f"Warning: MSI check covered {msi_checked} of {len(low_stock_skus)} SKUs.", file=sys.stderr)
-
-    # 5. Check enabled products with qty=0 and no backorders
-    try:
-        zero_stock = client.search("stockItems", filters=[
-            {"field": "qty", "value": "0", "condition_type": "eq"},
-            {"field": "manage_stock", "value": "1", "condition_type": "eq"},
-            {"field": "backorders", "value": "0", "condition_type": "eq"},
-        ], page_size=100)
-        for item in zero_stock.get("items", []):
-            sku = item.get("sku", "")
-            if sku not in stock_map:
-                rows.append({
-                    "Severity": "CRITICAL",
-                    "SKU": sku,
-                    "Qty": 0,
-                    "Velocity/day": 0,
-                    "Days Left": "0",
-                    "Issue": "Out of stock, no backorders",
-                })
-    except MagentoAPIError:
-        pass
 
     # Sort by severity
     severity_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
