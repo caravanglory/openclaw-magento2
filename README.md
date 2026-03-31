@@ -119,6 +119,9 @@ python3 scripts/system.py status
 python3 scripts/orders.py list --limit 5
 
 # Get a morning brief
+python3 scripts/morning_brief.py
+
+# Compatibility form (also supported)
 python3 scripts/morning_brief.py brief
 
 # Check inventory risks

@@ -118,6 +118,9 @@ python3 scripts/system.py status
 python3 scripts/orders.py list --limit 5
 
 # 获取晨报
+python3 scripts/morning_brief.py
+
+# 兼容写法（同样支持）
 python3 scripts/morning_brief.py brief
 
 # 检查库存风险

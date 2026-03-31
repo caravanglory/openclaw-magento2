@@ -264,10 +264,13 @@ Generate a daily store health summary across sales, orders, inventory, promotion
 
 ```
 # Generate morning brief (default: last 24 hours)
+python3 morning_brief.py [--site SITE] [--hours 24] [--stock-threshold 10]
+
+# Compatibility form (also supported)
 python3 morning_brief.py brief [--site SITE] [--hours 24] [--stock-threshold 10]
 
 # JSON output for programmatic consumption
-python3 morning_brief.py brief --format json
+python3 morning_brief.py --format json
 ```
 
 ### Diagnostics — `scripts/diagnose.py`
