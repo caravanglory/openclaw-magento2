@@ -208,10 +208,14 @@ def cmd_inventory_value(args):
         qty = stock_map.get(sku, 0)
         value = price * qty
         total_value += value
-        rows.append([sku, p.get("name"), format_quantity(qty, client), format_money(price, client), format_money(value, client)])
+        rows.append((
+            value,
+            [sku, p.get("name"), format_quantity(qty, client), format_money(price, client), format_money(value, client)]
+        ))
 
-    rows.sort(key=lambda r: float(r[4]), reverse=True)
-    print(tabulate(rows[:100], headers=["SKU", "Name", "Qty", "Price", "Value"], tablefmt="github"))
+    rows.sort(key=lambda r: r[0], reverse=True)
+    display_rows = [r[1] for r in rows]
+    print(tabulate(display_rows[:100], headers=["SKU", "Name", "Qty", "Price", "Value"], tablefmt="github"))
     print(f"\nTotal inventory value: {format_money(total_value, client)}")
     print(f"Items processed: {len(products)}")
 
