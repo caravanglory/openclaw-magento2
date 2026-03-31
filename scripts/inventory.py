@@ -22,11 +22,13 @@ def cmd_check(args):
     except MagentoAPIError as e:
         print_error_and_exit(e)
 
+    in_stock = item.get("is_in_stock")
+    manage_stock = item.get("manage_stock")
     fields = [
         ("SKU", args.sku),
         ("Qty", item.get("qty")),
-        ("In Stock", "Yes" if item.get("is_in_stock") else "No"),
-        ("Manage Stock", "Yes" if item.get("manage_stock") else "No"),
+        ("In Stock", "Yes" if in_stock is True else "No" if in_stock is False else "Unknown"),
+        ("Manage Stock", "Yes" if manage_stock is True else "No" if manage_stock is False else "Unknown"),
         ("Min Qty", item.get("min_qty")),
         ("Backorders", {0: "No", 1: "Allow (no notify)", 2: "Allow (notify)"}.get(item.get("backorders"), "Unknown")),
     ]
@@ -81,8 +83,10 @@ def cmd_bulk_check(args):
             item = get_stock_item(client, sku)
             items.append(item)
             found_skus.add(item.get("sku"))
-        except MagentoAPIError:
-            continue
+        except MagentoAPIError as e:
+            if e.status == 404:
+                continue
+            print_error_and_exit(e)
 
     rows = [
         [i.get("sku"), i.get("qty"), "Yes" if i.get("is_in_stock") else "No"]
@@ -284,8 +288,10 @@ def cmd_bulk_update(args):
         for sku in skus:
             try:
                 i = client.get(f"stockItems/{sku}")
-            except MagentoAPIError:
-                continue
+            except MagentoAPIError as e:
+                if e.status == 404:
+                    continue
+                raise
             existing[i.get("sku")] = i.get("qty", 0)
             existing_ids[i.get("sku")] = i.get("item_id")
     except MagentoAPIError as e:

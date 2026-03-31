@@ -195,7 +195,8 @@ def list_configured_sites() -> tuple[list[str], bool]:
 # ---------------------------------------------------------------------------
 
 def fetch_all(client, resource: str, filters: list | None = None,
-              max_pages: int | None = 50, page_size: int = 200) -> list[dict]:
+              max_pages: int | None = 50, page_size: int = 200,
+              sort_field: str | None = None, sort_dir: str = "DESC") -> list[dict]:
     """Fetch all pages for a given resource.
 
     Safety guardrails:
@@ -212,6 +213,8 @@ def fetch_all(client, resource: str, filters: list | None = None,
             filters=filters,
             page_size=page_size,
             current_page=page,
+            sort_field=sort_field,
+            sort_dir=sort_dir,
         )
         items = result.get("items", [])
         all_items.extend(items)
@@ -243,27 +246,32 @@ def utc_range(hours: int = 24) -> tuple[str, str]:
 def get_stock_item(client: MagentoClient, sku: str) -> dict:
     """Get stock for a SKU, falling back to MSI source-items aggregation when needed."""
     try:
-        return client.get(f"stockItems/{sku}")
+        item = client.get(f"stockItems/{sku}")
+        if "sku" not in item:
+            item["sku"] = sku
+        return item
     except MagentoAPIError as stock_err:
         if stock_err.status != 404:
             raise
 
-    result = client.search(
+    items = fetch_all(
+        client,
         "inventory/source-items",
         filters=[{"field": "sku", "value": sku, "condition_type": "eq"}],
+        max_pages=50,
         page_size=200,
     )
-    items = result.get("items", [])
     if not items:
         raise MagentoAPIError(404, f'The Product with SKU "{sku}" does not exist.', "")
 
     enabled = [i for i in items if i.get("status")]
     total_qty = sum(float(i.get("quantity", 0) or 0) for i in enabled)
+    inferred_in_stock = total_qty > 0 if enabled else None
     return {
         "sku": sku,
         "qty": total_qty,
-        "is_in_stock": total_qty > 0,
-        "manage_stock": True,
+        "is_in_stock": inferred_in_stock,
+        "manage_stock": None,
         "source_count": len(enabled),
         "source_items": items,
     }
@@ -275,14 +283,15 @@ def search_low_stock_items(client: MagentoClient, threshold: float | int | None,
     if threshold is not None:
         stock_filters.insert(0, {"field": "qty", "value": str(threshold), "condition_type": "lteq"})
     try:
-        result = client.search(
+        items = fetch_all(
+            client,
             "stockItems",
             filters=stock_filters,
+            max_pages=max_pages,
             page_size=200,
             sort_field="qty",
             sort_dir="ASC",
         )
-        items = result.get("items", [])
         items.sort(key=lambda i: float(i.get("qty", 0) or 0))
         return items
     except MagentoAPIError as stock_err:
