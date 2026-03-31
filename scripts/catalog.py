@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit, env_default, parse_csv_input
+from magento_client import get_client, MagentoAPIError, print_error_and_exit, env_default, parse_csv_input, get_stock_item
 
 try:
     from tabulate import tabulate
@@ -55,7 +55,7 @@ def cmd_get(args):
 
     stock = None
     try:
-        stock_info = client.get(f"stockItems/{args.sku}")
+        stock_info = get_stock_item(client, args.sku)
         stock = stock_info.get("qty")
     except MagentoAPIError:
         pass

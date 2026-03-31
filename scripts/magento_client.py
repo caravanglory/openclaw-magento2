@@ -148,8 +148,19 @@ class MagentoClient:
             if not isinstance(group, list):
                 group = [group]
             for j, f in enumerate(group):
-                params[f"searchCriteria[filterGroups][{i}][filters][{j}][field]"] = f["field"]
-                params[f"searchCriteria[filterGroups][{i}][filters][{j}][value]"] = f["value"]
+                field = f["field"]
+                value = f["value"]
+                # Some Magento installs reject OAuth-signed requests when datetime
+                # filter values contain a literal space. Normalize to ISO-like T format.
+                if (
+                    isinstance(value, str)
+                    and field in {"created_at", "updated_at", "special_from_date", "special_to_date"}
+                    and " " in value
+                    and "T" not in value
+                ):
+                    value = value.replace(" ", "T", 1)
+                params[f"searchCriteria[filterGroups][{i}][filters][{j}][field]"] = field
+                params[f"searchCriteria[filterGroups][{i}][filters][{j}][value]"] = value
                 params[f"searchCriteria[filterGroups][{i}][filters][{j}][conditionType]"] = f.get("condition_type", "eq")
 
         resp = self.session.get(self._url(resource), params=params, auth=self.auth, timeout=self.timeout)
@@ -184,7 +195,8 @@ def list_configured_sites() -> tuple[list[str], bool]:
 # ---------------------------------------------------------------------------
 
 def fetch_all(client, resource: str, filters: list | None = None,
-              max_pages: int | None = 50, page_size: int = 200) -> list[dict]:
+              max_pages: int | None = 50, page_size: int = 200,
+              sort_field: str | None = None, sort_dir: str = "DESC") -> list[dict]:
     """Fetch all pages for a given resource.
 
     Safety guardrails:
@@ -201,6 +213,8 @@ def fetch_all(client, resource: str, filters: list | None = None,
             filters=filters,
             page_size=page_size,
             current_page=page,
+            sort_field=sort_field,
+            sort_dir=sort_dir,
         )
         items = result.get("items", [])
         all_items.extend(items)
@@ -227,6 +241,96 @@ def utc_range(hours: int = 24) -> tuple[str, str]:
     end = datetime.now(timezone.utc)
     start = end - timedelta(hours=hours)
     return start.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def get_stock_item(client: MagentoClient, sku: str) -> dict:
+    """Get stock for a SKU, falling back to MSI source-items aggregation when needed."""
+    try:
+        item = client.get(f"stockItems/{sku}")
+        if "sku" not in item:
+            item["sku"] = sku
+        return item
+    except MagentoAPIError as stock_err:
+        if stock_err.status != 404:
+            raise
+
+    items = fetch_all(
+        client,
+        "inventory/source-items",
+        filters=[{"field": "sku", "value": sku, "condition_type": "eq"}],
+        max_pages=50,
+        page_size=200,
+    )
+    if not items:
+        raise MagentoAPIError(404, f'The Product with SKU "{sku}" does not exist.', "")
+
+    enabled = [i for i in items if i.get("status")]
+    total_qty = sum(float(i.get("quantity", 0) or 0) for i in enabled)
+    inferred_in_stock = total_qty > 0 if enabled else None
+    return {
+        "sku": sku,
+        "qty": total_qty,
+        "is_in_stock": inferred_in_stock,
+        "manage_stock": None,
+        "source_count": len(enabled),
+        "source_items": items,
+    }
+
+
+def search_low_stock_items(client: MagentoClient, threshold: float | int | None, max_pages: int | None = 50) -> list[dict]:
+    """List stock rows, with fallback to MSI source-items when stockItems search is unavailable."""
+    stock_filters = [{"field": "manage_stock", "value": "1", "condition_type": "eq"}]
+    if threshold is not None:
+        stock_filters.insert(0, {"field": "qty", "value": str(threshold), "condition_type": "lteq"})
+    try:
+        items = fetch_all(
+            client,
+            "stockItems",
+            filters=stock_filters,
+            max_pages=max_pages,
+            page_size=200,
+            sort_field="qty",
+            sort_dir="ASC",
+        )
+        items.sort(key=lambda i: float(i.get("qty", 0) or 0))
+        return items
+    except MagentoAPIError as stock_err:
+        if stock_err.status != 404:
+            raise
+
+    source_items = fetch_all(
+        client,
+        "inventory/source-items",
+        filters=[{"field": "status", "value": "1", "condition_type": "eq"}],
+        max_pages=max_pages,
+        page_size=200,
+    )
+
+    by_sku: dict[str, dict] = {}
+    for item in source_items:
+        sku = item.get("sku")
+        if not sku:
+            continue
+        row = by_sku.setdefault(
+            sku,
+            {
+                "sku": sku,
+                "qty": 0.0,
+                "is_in_stock": False,
+                "manage_stock": True,
+                "source_count": 0,
+            },
+        )
+        qty = float(item.get("quantity", 0) or 0)
+        row["qty"] += qty
+        row["is_in_stock"] = row["is_in_stock"] or qty > 0
+        row["source_count"] += 1
+
+    items = list(by_sku.values())
+    if threshold is not None:
+        items = [row for row in items if row["qty"] <= threshold]
+    items.sort(key=lambda i: float(i.get("qty", 0) or 0))
+    return items
 
 
 def env_default(env_key: str, cli_value, hardcoded_default):

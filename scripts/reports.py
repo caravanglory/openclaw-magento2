@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit, fetch_all
+from magento_client import get_client, MagentoAPIError, print_error_and_exit, fetch_all, search_low_stock_items
 
 try:
     import pandas as pd
@@ -193,7 +193,7 @@ def cmd_order_status(args):
 def cmd_inventory_value(args):
     client = get_client(args.site)
     try:
-        stock_items = fetch_all(client, "stockItems")
+        stock_items = search_low_stock_items(client, threshold=None, max_pages=None)
         products = fetch_all(client, "products")
     except MagentoAPIError as e:
         print_error_and_exit(e)

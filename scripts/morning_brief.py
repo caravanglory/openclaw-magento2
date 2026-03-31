@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from magento_client import (
     get_client, MagentoAPIError,
     fetch_all, utc_range, env_default, SectionResult, render_sections,
-    _section_to_dict,
+    _section_to_dict, search_low_stock_items,
 )
 
 try:
@@ -123,14 +123,9 @@ def _section_inventory(client, threshold: int) -> SectionResult:
     """Low stock products (qty <= threshold and manage_stock=1)."""
     t0 = time.monotonic()
     try:
-        result = client.search("stockItems", filters=[
-            {"field": "qty", "value": str(threshold), "condition_type": "lteq"},
-            {"field": "manage_stock", "value": "1", "condition_type": "eq"},
-        ], page_size=100, sort_field="qty", sort_dir="ASC")
+        items = search_low_stock_items(client, threshold)
     except MagentoAPIError as e:
         return SectionResult("Inventory Risks", "error", time.monotonic() - t0, error=str(e))
-
-    items = result.get("items", [])
     if not items:
         return SectionResult("Inventory Risks", "ok", time.monotonic() - t0,
                              findings=[f"No products below threshold of {threshold}."])
@@ -345,6 +340,7 @@ def cmd_brief(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Magento 2 Morning Brief")
+    parser.add_argument("command", nargs="?", choices=["brief"], help="Optional compatibility subcommand")
     parser.add_argument("--site", default=None, help="Site alias (e.g. us, eu)")
     parser.add_argument("--hours", type=int, default=None,
                          help="Time window in hours (default: 24)")
