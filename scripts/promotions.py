@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit
+from magento_client import get_client, MagentoAPIError, print_error_and_exit, format_money
 
 try:
     from tabulate import tabulate
@@ -57,7 +57,7 @@ def cmd_get(args):
         ("Description", r.get("description") or "—"),
         ("Status", "Active" if r.get("is_active") else "Inactive"),
         ("Coupon Type", r.get("coupon_type")),
-        ("Discount", f"{r.get('discount_amount', 0):.2f}"),
+        ("Discount", format_money(r.get('discount_amount', 0), client)),
         ("Action", r.get("simple_action")),
         ("Uses Per Coupon", r.get("uses_per_coupon") or "Unlimited"),
         ("Uses Per Customer", r.get("uses_per_customer") or "Unlimited"),

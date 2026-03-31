@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from magento_client import (
     get_client, MagentoAPIError,
     fetch_all, utc_range, env_default, SectionResult, render_sections,
-    _section_to_dict, search_low_stock_items,
+    _section_to_dict, search_low_stock_items, format_money, format_quantity,
 )
 
 try:
@@ -45,8 +45,8 @@ def _section_sales(client, hours: int) -> SectionResult:
 
     rows = [
         {"Metric": "Orders", "Value": str(total_orders)},
-        {"Metric": "Revenue", "Value": f"{total_revenue:.2f} {currency}"},
-        {"Metric": "Avg. Order Value", "Value": f"{avg_order:.2f} {currency}"},
+        {"Metric": "Revenue", "Value": format_money(total_revenue, client, currency=currency)},
+        {"Metric": "Avg. Order Value", "Value": format_money(avg_order, client, currency=currency)},
     ]
     return SectionResult(f"Sales (Last {hours}h)", "ok", time.monotonic() - t0, rows=rows)
 
@@ -74,7 +74,7 @@ def _section_order_anomalies(client, hours: int) -> SectionResult:
                     "Order #": o.get("increment_id"),
                     "Status": "pending",
                     "Customer": o.get("customer_email", ""),
-                    "Total": f"{o.get('base_grand_total', 0):.2f}",
+                    "Total": format_money(o.get('base_grand_total', 0), client, currency=o.get('base_currency_code', '')),
                     "Created": o.get("created_at", "")[:16],
                 })
     except MagentoAPIError:
@@ -94,7 +94,7 @@ def _section_order_anomalies(client, hours: int) -> SectionResult:
                     "Order #": o.get("increment_id"),
                     "Status": "payment_review",
                     "Customer": o.get("customer_email", ""),
-                    "Total": f"{o.get('base_grand_total', 0):.2f}",
+                    "Total": format_money(o.get('base_grand_total', 0), client, currency=o.get('base_currency_code', '')),
                     "Created": o.get("created_at", "")[:16],
                 })
     except MagentoAPIError:
@@ -135,7 +135,7 @@ def _section_inventory(client, threshold: int) -> SectionResult:
     for i in items[:20]:
         rows.append({
             "SKU": i.get("sku", ""),
-            "Qty": i.get("qty", 0),
+            "Qty": format_quantity(i.get("qty", 0), client),
             "In Stock": "Yes" if i.get("is_in_stock") else "No",
         })
 

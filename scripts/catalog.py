@@ -7,7 +7,11 @@ import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit, env_default, parse_csv_input, get_stock_item
+from magento_client import (
+    get_client, MagentoAPIError, print_error_and_exit, env_default,
+    parse_csv_input, get_stock_item, format_money, format_quantity,
+    get_price_snapshot, format_bool,
+)
 
 try:
     from tabulate import tabulate
@@ -32,17 +36,25 @@ def cmd_search(args):
         print("No products found.")
         return
 
-    rows = [
-        [
+    rows = []
+    for p in items:
+        prices = get_price_snapshot(p, client)
+        tier_summary = ", ".join(
+            f"qty {format_quantity(tp['qty'], client)}: {format_money(tp['value'], client)}"
+            for tp in prices['tier_prices'][:2]
+        ) or "—"
+        rows.append([
             p.get("sku"),
             p.get("name"),
-            f"{p.get('price', 0):.2f}",
-            p.get("status", ""),
+            format_money(prices['display'], client),
+            format_money(prices['regular'], client),
+            format_money(prices['special'], client) if prices['special'] is not None else "—",
+            tier_summary,
+            format_bool(prices['special_active'] if prices['special'] is not None else None),
+            "Enabled" if p.get("status") == 1 else "Disabled",
             p.get("type_id", ""),
-        ]
-        for p in items
-    ]
-    print(tabulate(rows, headers=["SKU", "Name", "Price", "Status", "Type"], tablefmt="github"))
+        ])
+    print(tabulate(rows, headers=["SKU", "Name", "Display Price", "Regular", "Special", "Tier Price", "Special Active", "Status", "Type"], tablefmt="github"))
     print(f"\n{len(items)} of {result.get('total_count', len(items))} products.")
 
 
@@ -60,14 +72,23 @@ def cmd_get(args):
     except MagentoAPIError:
         pass
 
+    prices = get_price_snapshot(p, client)
+    tier_lines = [
+        f"qty {format_quantity(tp['qty'], client)}: {format_money(tp['value'], client)}"
+        for tp in prices['tier_prices']
+    ]
     fields = [
         ("SKU", p.get("sku")),
         ("Name", p.get("name")),
-        ("Price", f"{p.get('price', 0):.2f}"),
+        ("Display Price", format_money(prices["display"], client)),
+        ("Regular Price", format_money(prices["regular"], client)),
+        ("Special Price", format_money(prices["special"], client) if prices["special"] is not None else "—"),
+        ("Special Active", format_bool(prices["special_active"] if prices["special"] is not None else None)),
+        ("Tier Price", " | ".join(tier_lines) if tier_lines else "—"),
         ("Status", "Enabled" if p.get("status") == 1 else "Disabled"),
         ("Type", p.get("type_id")),
         ("Weight", p.get("weight")),
-        ("Stock Qty", stock if stock is not None else "N/A"),
+        ("Stock Qty", format_quantity(stock, client) if stock is not None else "N/A"),
         ("Created", (p.get("created_at") or "")[:10]),
         ("Updated", (p.get("updated_at") or "")[:10]),
     ]
@@ -87,7 +108,7 @@ def cmd_update_price(args):
         )
     except MagentoAPIError as e:
         print_error_and_exit(e)
-    print(f"Price for {args.sku} updated to {float(args.price):.2f}.")
+    print(f"Price for {args.sku} updated to {format_money(args.price, client)}.")
 
 
 def cmd_update_attribute(args):
@@ -192,7 +213,7 @@ def cmd_bulk_update_price(args):
     for sku, new_price in parsed:
         current = existing.get(sku)
         if current is None:
-            preview_rows.append([sku, "NOT FOUND", f"{new_price:.2f}", "N/A"])
+            preview_rows.append([sku, "NOT FOUND", format_money(new_price, client), "N/A"])
             continue
         current = float(current)
         price_map[sku] = (current, new_price)
@@ -205,7 +226,7 @@ def cmd_bulk_update_price(args):
                 change_str = "+0.0%"
             else:
                 change_str = f"{(new_price - current):+.2f}"
-        preview_rows.append([sku, f"{current:.2f}", f"{new_price:.2f}", change_str])
+        preview_rows.append([sku, format_money(current, client), format_money(new_price, client), change_str])
 
     print("Price Change Preview:")
     print(tabulate(preview_rows, headers=["SKU", "Current Price", "New Price", "Change"], tablefmt="github"))

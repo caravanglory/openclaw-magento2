@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from magento_client import (
     get_client, MagentoAPIError, print_error_and_exit,
     fetch_all, utc_range, env_default, SectionResult, render_sections,
-    search_low_stock_items,
+    search_low_stock_items, format_money, format_quantity,
 )
 
 try:
@@ -112,8 +112,8 @@ def cmd_inventory_risk(args):
         rows.append({
             "Severity": severity,
             "SKU": sku,
-            "Qty": current_qty,
-            "Velocity/day": round(velocity, 1),
+            "Qty": format_quantity(current_qty, client),
+            "Velocity/day": format_quantity(round(velocity, 1), client),
             "Days Left": f"{days_left:.1f}" if days_left != float("inf") else "∞",
             "Issue": issue,
         })
@@ -323,7 +323,7 @@ def cmd_order_exceptions(args):
                 "Type": "Stuck Pending",
                 "Order #": o.get("increment_id"),
                 "Customer": o.get("customer_email", ""),
-                "Total": f"{o.get('base_grand_total', 0):.2f}",
+                "Total": format_money(o.get('base_grand_total', 0), client, currency=o.get('base_currency_code', '')),
                 "Age": _format_age(o.get("created_at", "")),
             })
     except MagentoAPIError:
@@ -339,7 +339,7 @@ def cmd_order_exceptions(args):
                 "Type": "Payment Review",
                 "Order #": o.get("increment_id"),
                 "Customer": o.get("customer_email", ""),
-                "Total": f"{o.get('base_grand_total', 0):.2f}",
+                "Total": format_money(o.get('base_grand_total', 0), client, currency=o.get('base_currency_code', '')),
                 "Age": _format_age(o.get("created_at", "")),
             })
     except MagentoAPIError:
@@ -357,7 +357,7 @@ def cmd_order_exceptions(args):
                 "Type": "Stuck Processing",
                 "Order #": o.get("increment_id"),
                 "Customer": o.get("customer_email", ""),
-                "Total": f"{o.get('base_grand_total', 0):.2f}",
+                "Total": format_money(o.get('base_grand_total', 0), client, currency=o.get('base_currency_code', '')),
                 "Age": _format_age(o.get("created_at", "")),
             })
     except MagentoAPIError:

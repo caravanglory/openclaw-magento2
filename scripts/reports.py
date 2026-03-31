@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit, fetch_all, search_low_stock_items
+from magento_client import get_client, MagentoAPIError, print_error_and_exit, fetch_all, search_low_stock_items, format_money, format_quantity
 
 try:
     import pandas as pd
@@ -57,10 +57,10 @@ def cmd_sales(args):
     print("─" * 40)
     summary = [
         ["Total orders", total_orders],
-        ["Total revenue", f"{total_revenue:.2f} {currency}"],
-        ["Avg. order value", f"{avg_order:.2f} {currency}"],
-        ["Total tax collected", f"{total_tax:.2f} {currency}"],
-        ["Total shipping", f"{total_shipping:.2f} {currency}"],
+        ["Total revenue", format_money(total_revenue, client, currency=currency)],
+        ["Avg. order value", format_money(avg_order, client, currency=currency)],
+        ["Total tax collected", format_money(total_tax, client, currency=currency)],
+        ["Total shipping", format_money(total_shipping, client, currency=currency)],
         ["Cancelled orders", cancelled],
     ]
     print(tabulate(summary, tablefmt="simple"))
@@ -114,7 +114,7 @@ def cmd_top_products(args):
         units=("qty", "sum"), revenue=("revenue", "sum")
     ).reset_index().sort_values("revenue", ascending=False).head(args.limit)
 
-    agg["revenue"] = agg["revenue"].map(lambda x: f"{x:.2f} {currency}")
+    agg["revenue"] = agg["revenue"].map(lambda x: format_money(x, client, currency=currency))
     print(f"\nTop {args.limit} products by revenue ({date_from} to {date_to}):")
     print(tabulate(agg[["sku", "name", "units", "revenue"]].values.tolist(),
                    headers=["SKU", "Name", "Units Sold", "Revenue"], tablefmt="github"))
@@ -154,7 +154,7 @@ def cmd_top_customers(args):
         orders=("total", "count"), spent=("total", "sum")
     ).reset_index().sort_values("spent", ascending=False).head(args.limit)
 
-    agg["spent"] = agg["spent"].map(lambda x: f"{x:.2f} {currency}")
+    agg["spent"] = agg["spent"].map(lambda x: format_money(x, client, currency=currency))
     print(f"\nTop {args.limit} customers by spend ({date_from} to {date_to}):")
     print(tabulate(agg[["email", "name", "orders", "spent"]].values.tolist(),
                    headers=["Email", "Name", "Orders", "Total Spent"], tablefmt="github"))
@@ -185,7 +185,7 @@ def cmd_order_status(args):
     ).reset_index().sort_values("count", ascending=False)
 
     currency = df["base_currency_code"].mode()[0] if "base_currency_code" in df.columns else ""
-    breakdown["revenue"] = breakdown["revenue"].map(lambda x: f"{x:.2f} {currency}")
+    breakdown["revenue"] = breakdown["revenue"].map(lambda x: format_money(x, client, currency=currency))
     print(f"\nOrder status breakdown ({date_from} to {date_to}):")
     print(tabulate(breakdown.values.tolist(), headers=["Status", "Count", "Revenue"], tablefmt="github"))
 
@@ -208,11 +208,11 @@ def cmd_inventory_value(args):
         qty = stock_map.get(sku, 0)
         value = price * qty
         total_value += value
-        rows.append([sku, p.get("name"), qty, f"{price:.2f}", f"{value:.2f}"])
+        rows.append([sku, p.get("name"), format_quantity(qty, client), format_money(price, client), format_money(value, client)])
 
     rows.sort(key=lambda r: float(r[4]), reverse=True)
     print(tabulate(rows[:100], headers=["SKU", "Name", "Qty", "Price", "Value"], tablefmt="github"))
-    print(f"\nTotal inventory value: {total_value:.2f}")
+    print(f"\nTotal inventory value: {format_money(total_value, client)}")
     print(f"Items processed: {len(products)}")
 
 

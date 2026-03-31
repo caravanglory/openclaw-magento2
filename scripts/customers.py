@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit
+from magento_client import get_client, MagentoAPIError, print_error_and_exit, format_money
 
 try:
     from tabulate import tabulate
@@ -91,7 +91,7 @@ def cmd_orders(args):
         [
             o.get("increment_id"),
             o.get("status"),
-            f"{o.get('base_grand_total', 0):.2f} {o.get('base_currency_code', '')}",
+            format_money(o.get('base_grand_total', 0), client, currency=o.get('base_currency_code', '')),
             (o.get("created_at") or "")[:10],
         ]
         for o in items
@@ -99,7 +99,7 @@ def cmd_orders(args):
     print(tabulate(rows, headers=["Order #", "Status", "Total", "Date"], tablefmt="github"))
     total_spent = sum(o.get("base_grand_total", 0) for o in items)
     currency = items[0].get("base_currency_code", "") if items else ""
-    print(f"\nTotal spent: {total_spent:.2f} {currency} across {len(items)} orders.")
+    print(f"\nTotal spent: {format_money(total_spent, client, currency=currency)} across {len(items)} orders.")
 
 
 def cmd_update_group(args):
