@@ -31,6 +31,7 @@ metadata:
           - requests-oauthlib
           - pandas
           - tabulate
+          - Babel
         label: "Install Python dependencies (uv)"
 ---
 

@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit, env_default, parse_csv_input
+from magento_client import get_client, MagentoAPIError, print_error_and_exit, env_default, parse_csv_input, format_money, format_quantity
 
 try:
     from tabulate import tabulate
@@ -41,7 +41,7 @@ def cmd_list(args):
             o.get("increment_id"),
             o.get("status"),
             o.get("customer_email"),
-            f"{o.get('base_grand_total', 0):.2f} {o.get('base_currency_code', '')}",
+            format_money(o.get('base_grand_total', 0), client, currency=o.get('base_currency_code', '')),
             o.get("created_at", "")[:10],
         ]
         for o in items
@@ -77,9 +77,9 @@ def cmd_get(args):
         ("Status", o.get("status")),
         ("Customer", f"{o.get('customer_firstname', '')} {o.get('customer_lastname', '')}".strip()),
         ("Email", o.get("customer_email")),
-        ("Grand Total", f"{o.get('base_grand_total', 0):.2f} {o.get('base_currency_code', '')}"),
-        ("Shipping", f"{o.get('base_shipping_amount', 0):.2f}"),
-        ("Tax", f"{o.get('base_tax_amount', 0):.2f}"),
+        ("Grand Total", format_money(o.get('base_grand_total', 0), client, currency=o.get('base_currency_code', ''))),
+        ("Shipping", format_money(o.get('base_shipping_amount', 0), client, currency=o.get('base_currency_code', ''))),
+        ("Tax", format_money(o.get('base_tax_amount', 0), client, currency=o.get('base_currency_code', ''))),
         ("Created", o.get("created_at", "")[:19]),
         ("Updated", o.get("updated_at", "")[:19]),
     ]
@@ -89,7 +89,7 @@ def cmd_get(args):
     if items:
         print("\nItems:")
         rows = [
-            [i.get("sku"), i.get("name"), int(i.get("qty_ordered", 0)), f"{i.get('base_price', 0):.2f}"]
+            [i.get("sku"), i.get("name"), format_quantity(i.get("qty_ordered", 0), client), format_money(i.get('base_price', 0), client, currency=o.get('base_currency_code', ''))]
             for i in items
         ]
         print(tabulate(rows, headers=["SKU", "Name", "Qty", "Price"], tablefmt="github"))

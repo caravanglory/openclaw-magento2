@@ -11,21 +11,24 @@ import logging
 import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 try:
     import requests
+    from babel.numbers import format_currency as babel_format_currency, format_decimal as babel_format_decimal
     from requests.adapters import HTTPAdapter
     from urllib3.util import Retry
     from requests_oauthlib import OAuth1
 except ImportError:
-    sys.exit("Missing dependencies. Run: uv pip install requests requests-oauthlib")
+    sys.exit("Missing dependencies. Run: uv pip install requests requests-oauthlib Babel")
 
 
 # Set up basic logging to stderr for internal debugging if MAGENTO_DEBUG is set
 if os.environ.get("MAGENTO_DEBUG"):
     logging.basicConfig(level=logging.DEBUG, stream=sys.stderr, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("magento_client")
+_STORE_CONTEXT_CACHE: dict[str, dict[str, str]] = {}
 
 
 class MagentoAPIError(Exception):
@@ -152,13 +155,13 @@ class MagentoClient:
                 value = f["value"]
                 # Some Magento installs reject OAuth-signed requests when datetime
                 # filter values contain a literal space. Normalize to ISO-like T format.
-                if (
-                    isinstance(value, str)
-                    and field in {"created_at", "updated_at", "special_from_date", "special_to_date"}
-                    and " " in value
-                    and "T" not in value
-                ):
-                    value = value.replace(" ", "T", 1)
+                if isinstance(value, str) and " " in value:
+                    if field in {"created_at", "updated_at", "special_from_date", "special_to_date"} and "T" not in value:
+                        value = value.replace(" ", "T", 1)
+                    elif field in {"name", "sku", "email", "firstname", "lastname"}:
+                        # Some Magento installs also reject OAuth-signed LIKE filters
+                        # containing literal spaces. Replace with SQL wildcard spacing.
+                        value = value.replace(" ", "%")
                 params[f"searchCriteria[filterGroups][{i}][filters][{j}][field]"] = field
                 params[f"searchCriteria[filterGroups][{i}][filters][{j}][value]"] = value
                 params[f"searchCriteria[filterGroups][{i}][filters][{j}][conditionType]"] = f.get("condition_type", "eq")
@@ -241,6 +244,147 @@ def utc_range(hours: int = 24) -> tuple[str, str]:
     end = datetime.now(timezone.utc)
     start = end - timedelta(hours=hours)
     return start.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _to_decimal(value) -> Decimal | None:
+    if value in (None, "", "None"):
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+def parse_magento_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace(" ", "T")).replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def get_store_context(client: MagentoClient) -> dict[str, str]:
+    cache_key = (client.site or "__default__").lower()
+    cached = _STORE_CONTEXT_CACHE.get(cache_key)
+    if cached:
+        return cached
+
+    locale = "en_US"
+    currency = "USD"
+    try:
+        configs = client.get("store/storeConfigs")
+        if configs:
+            cfg = configs[0]
+            locale = cfg.get("locale") or locale
+            currency = cfg.get("default_display_currency_code") or cfg.get("base_currency_code") or currency
+    except MagentoAPIError:
+        pass
+
+    context = {"locale": locale, "currency": currency}
+    _STORE_CONTEXT_CACHE[cache_key] = context
+    return context
+
+
+def format_money(value, client: MagentoClient | None = None, currency: str | None = None, locale: str | None = None) -> str:
+    amount = _to_decimal(value)
+    if amount is None:
+        return "—"
+
+    if client and (currency is None or locale is None):
+        context = get_store_context(client)
+        currency = currency or context["currency"]
+        locale = locale or context["locale"]
+
+    currency = currency or "USD"
+    locale = locale or "en_US"
+
+    try:
+        return babel_format_currency(amount, currency, locale=locale)
+    except Exception:
+        return f"{amount:.2f} {currency}"
+
+
+def format_quantity(value, client: MagentoClient | None = None, locale: str | None = None) -> str:
+    amount = _to_decimal(value)
+    if amount is None:
+        return "—"
+
+    if client and locale is None:
+        locale = get_store_context(client)["locale"]
+    locale = locale or "en_US"
+
+    try:
+        pattern = "#,##0" if amount == amount.to_integral_value() else "#,##0.###"
+        return babel_format_decimal(amount, format=pattern, locale=locale)
+    except Exception:
+        if amount == amount.to_integral_value():
+            return str(int(amount))
+        return format(amount.normalize(), "f").rstrip("0").rstrip(".")
+
+
+def format_bool(value) -> str:
+    if value is True:
+        return "Yes"
+    if value is False:
+        return "No"
+    return "Unknown"
+
+
+def get_custom_attr(product: dict, attr_code: str):
+    for attr in product.get("custom_attributes", []):
+        if attr.get("attribute_code") == attr_code:
+            return attr.get("value")
+    return None
+
+
+def get_special_price(product: dict) -> Decimal | None:
+    return _to_decimal(get_custom_attr(product, "special_price"))
+
+
+def get_price_snapshot(product: dict, client: MagentoClient | None = None) -> dict:
+    regular = _to_decimal(product.get("price")) or Decimal("0")
+    special = get_special_price(product)
+    special_from = parse_magento_datetime(get_custom_attr(product, "special_from_date"))
+    special_to = parse_magento_datetime(get_custom_attr(product, "special_to_date"))
+    now = datetime.now(timezone.utc)
+
+    special_active = False
+    if special is not None and special > 0 and special < regular:
+        if (special_from is None or now >= special_from) and (special_to is None or now <= special_to):
+            special_active = True
+
+    tier_prices = []
+    for entry in product.get("tier_prices", []):
+        qty = _to_decimal(entry.get("qty"))
+        value = _to_decimal(entry.get("value"))
+        if qty is None or value is None:
+            continue
+        tier_prices.append({
+            "qty": qty,
+            "value": value,
+            "customer_group_id": entry.get("customer_group_id"),
+            "website_id": entry.get("extension_attributes", {}).get("website_id"),
+        })
+    tier_prices.sort(key=lambda x: (x["qty"], x["value"]))
+
+    display = regular
+    if special_active and special is not None and special < display:
+        display = special
+    if tier_prices and tier_prices[0]["value"] < display:
+        display = tier_prices[0]["value"]
+
+    currency = get_store_context(client)["currency"] if client else "USD"
+    return {
+        "regular": regular,
+        "special": special,
+        "special_active": special_active,
+        "special_from": special_from,
+        "special_to": special_to,
+        "tier_prices": tier_prices,
+        "display": display,
+        "currency": currency,
+    }
 
 
 def get_stock_item(client: MagentoClient, sku: str) -> dict:

@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from magento_client import get_client, MagentoAPIError, print_error_and_exit
+from magento_client import get_client, MagentoAPIError, print_error_and_exit, format_money
 
 try:
     from tabulate import tabulate
@@ -51,14 +51,17 @@ def cmd_get(args):
     except MagentoAPIError as e:
         print_error_and_exit(e)
 
+    action = r.get("simple_action")
+    amount = r.get('discount_amount', 0)
+    discount_display = f"{amount:.0f}%" if action == "by_percent" else format_money(amount, client)
     fields = [
         ("Rule ID", r.get("rule_id")),
         ("Name", r.get("name")),
         ("Description", r.get("description") or "—"),
         ("Status", "Active" if r.get("is_active") else "Inactive"),
         ("Coupon Type", r.get("coupon_type")),
-        ("Discount", f"{r.get('discount_amount', 0):.2f}"),
-        ("Action", r.get("simple_action")),
+        ("Discount", discount_display),
+        ("Action", action),
         ("Uses Per Coupon", r.get("uses_per_coupon") or "Unlimited"),
         ("Uses Per Customer", r.get("uses_per_customer") or "Unlimited"),
         ("From Date", r.get("from_date") or "—"),
